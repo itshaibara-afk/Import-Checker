@@ -1,0 +1,468 @@
+{
+  "updatedAt": "2026-07-09T07:42:15.663Z",
+  "source": "https://www.rover.infrastructure.gov.au/PublishedApprovals/SEVApprovals/",
+  "note": "これはシード用の初期データです。scraper/scrape_rover.py の初回実行後、実データで上書きされます。",
+  "vehicles": [
+    {
+      "make": "Nissan",
+      "model": "Skyline GT-R",
+      "code": "BNR32",
+      "category": "パフォーマンス",
+      "year": "1989–1994",
+      "engines": [
+        {
+          "code": "RB26DETT",
+          "ok": true
+        },
+        {
+          "code": "RB20DET",
+          "ok": false
+        }
+      ],
+      "mileageLimit": "制限なし",
+      "sev": "SEV-DEMO-0101",
+      "expiry": "2027-05-31",
+      "roverId": "3b583516-515f-4796-a79a-2d7ed754c30d"
+    },
+    {
+      "make": "Nissan",
+      "model": "Skyline GT-R",
+      "code": "BCNR33",
+      "category": "パフォーマンス",
+      "year": "1995–1998",
+      "engines": [
+        {
+          "code": "RB26DETT",
+          "ok": true
+        }
+      ],
+      "mileageLimit": "制限なし",
+      "sev": "SEV-DEMO-0102",
+      "expiry": "2026-08-20",
+      "roverId": "2289afeb-93bf-4ea2-9200-bcad5d265c16"
+    },
+    {
+      "make": "Nissan",
+      "model": "Silvia",
+      "code": "S15",
+      "category": "パフォーマンス",
+      "year": "1999–2002",
+      "engines": [
+        {
+          "code": "SR20DET",
+          "ok": true
+        },
+        {
+          "code": "SR20DE",
+          "ok": false
+        }
+      ],
+      "mileageLimit": "制限なし",
+      "sev": "SEV-DEMO-0103",
+      "expiry": "2026-06-01",
+      "roverId": "13b9d903-66da-44fa-9d21-b44952595138"
+    },
+    {
+      "make": "Nissan",
+      "model": "Cima",
+      "code": "FY33",
+      "category": "ラグジュアリー",
+      "year": "1996–2001",
+      "engines": [
+        {
+          "code": "VG30DET",
+          "ok": true
+        }
+      ],
+      "mileageLimit": "160,000km以下",
+      "sev": "SEV-DEMO-0104",
+      "expiry": "2028-01-15",
+      "roverId": "1fc39daf-9c7f-493f-8d03-e66c4084db25"
+    },
+    {
+      "make": "Toyota",
+      "model": "Supra",
+      "code": "JZA80",
+      "category": "パフォーマンス",
+      "year": "1993–2002",
+      "engines": [
+        {
+          "code": "2JZ-GTE",
+          "ok": true
+        },
+        {
+          "code": "2JZ-GE",
+          "ok": false
+        }
+      ],
+      "mileageLimit": "制限なし",
+      "sev": "SEV-DEMO-0201",
+      "expiry": "2027-11-30",
+      "roverId": "a5c88a72-0104-4fac-aee4-1a6185346a92"
+    },
+    {
+      "make": "Toyota",
+      "model": "Chaser",
+      "code": "JZX100",
+      "category": "パフォーマンス",
+      "year": "1996–2001",
+      "engines": [
+        {
+          "code": "1JZ-GTE",
+          "ok": true
+        },
+        {
+          "code": "1G-FE",
+          "ok": false
+        }
+      ],
+      "mileageLimit": "制限なし",
+      "sev": "SEV-DEMO-0202",
+      "expiry": "2026-09-30",
+      "roverId": "ea04a6fa-f40b-4655-aeb2-6e34ccd49e58"
+    },
+    {
+      "make": "Toyota",
+      "model": "Land Cruiser Prado",
+      "code": "KZJ95",
+      "category": "オフロード",
+      "year": "1996–2002",
+      "engines": [
+        {
+          "code": "1KZ-TE",
+          "ok": true
+        }
+      ],
+      "mileageLimit": "200,000km以下",
+      "sev": "SEV-DEMO-0203",
+      "expiry": "2029-03-01",
+      "roverId": "4b9054b6-a24e-4761-b7fb-26754029014f"
+    },
+    {
+      "make": "Toyota",
+      "model": "Mega Cruiser",
+      "code": "BXD20",
+      "category": "オフロード",
+      "year": "1995–2001",
+      "engines": [
+        {
+          "code": "15B-FTE",
+          "ok": true
+        }
+      ],
+      "mileageLimit": "制限なし",
+      "sev": "SEV-DEMO-0204",
+      "expiry": "2026-01-10",
+      "roverId": "6b60002e-3117-4000-9c81-c1b49e38ed33"
+    },
+    {
+      "make": "Mazda",
+      "model": "RX-7",
+      "code": "FD3S",
+      "category": "パフォーマンス",
+      "year": "1992–2002",
+      "engines": [
+        {
+          "code": "13B-REW",
+          "ok": true
+        }
+      ],
+      "mileageLimit": "制限なし",
+      "sev": "SEV-DEMO-0301",
+      "expiry": "2027-07-01",
+      "roverId": "01a19dbc-6355-4de1-90ef-17900a073662"
+    },
+    {
+      "make": "Mazda",
+      "model": "Autozam AZ-1",
+      "code": "PG6SA",
+      "category": "軽自動車",
+      "year": "1992–1994",
+      "engines": [
+        {
+          "code": "F6A",
+          "ok": true
+        }
+      ],
+      "mileageLimit": "100,000km以下",
+      "sev": "SEV-DEMO-0302",
+      "expiry": "2028-08-08",
+      "roverId": "23c690c4-3a81-4481-9cf8-cab582bc787a"
+    },
+    {
+      "make": "Honda",
+      "model": "NSX",
+      "code": "NA1",
+      "category": "パフォーマンス",
+      "year": "1990–1997",
+      "engines": [
+        {
+          "code": "C30A",
+          "ok": true
+        },
+        {
+          "code": "C32B",
+          "ok": true
+        }
+      ],
+      "mileageLimit": "制限なし",
+      "sev": "SEV-DEMO-0401",
+      "expiry": "2026-07-25",
+      "roverId": "de8c1736-67e9-407d-b8e5-e13fa77c2990"
+    },
+    {
+      "make": "Honda",
+      "model": "Beat",
+      "code": "PP1",
+      "category": "軽自動車",
+      "year": "1991–1996",
+      "engines": [
+        {
+          "code": "E07A",
+          "ok": true
+        }
+      ],
+      "mileageLimit": "制限なし",
+      "sev": "SEV-DEMO-0402",
+      "expiry": "2029-12-31",
+      "roverId": "ff824928-6f45-4566-833c-5db68f117a8f"
+    },
+    {
+      "make": "Subaru",
+      "model": "Impreza WRX STI",
+      "code": "GC8",
+      "category": "パフォーマンス",
+      "year": "1994–2000",
+      "engines": [
+        {
+          "code": "EJ20G",
+          "ok": true
+        },
+        {
+          "code": "EJ20E",
+          "ok": false
+        }
+      ],
+      "mileageLimit": "制限なし",
+      "sev": "SEV-DEMO-0501",
+      "expiry": "2025-10-01",
+      "roverId": "feced413-1f6c-4516-bbdc-f3c7d13c23c7"
+    },
+    {
+      "make": "Subaru",
+      "model": "Sambar",
+      "code": "KS3",
+      "category": "軽自動車",
+      "year": "1990–1998",
+      "engines": [
+        {
+          "code": "EN07",
+          "ok": true
+        }
+      ],
+      "mileageLimit": "100,000km以下",
+      "sev": "SEV-DEMO-0502",
+      "expiry": "2027-02-14",
+      "roverId": "ac74e0b5-2c3f-406d-8aa1-009649aa16e6"
+    },
+    {
+      "make": "Mitsubishi",
+      "model": "Lancer Evolution",
+      "code": "CN9A",
+      "category": "パフォーマンス",
+      "year": "1995–1996",
+      "engines": [
+        {
+          "code": "4G63T",
+          "ok": true
+        }
+      ],
+      "mileageLimit": "制限なし",
+      "sev": "SEV-DEMO-0601",
+      "expiry": "2026-10-05",
+      "roverId": "04ab00ca-1915-481e-994f-f5ac7e42ec45"
+    },
+    {
+      "make": "Mitsubishi",
+      "model": "Pajero Evolution",
+      "code": "V55W",
+      "category": "オフロード",
+      "year": "1997–1999",
+      "engines": [
+        {
+          "code": "6G74",
+          "ok": true
+        }
+      ],
+      "mileageLimit": "180,000km以下",
+      "sev": "SEV-DEMO-0602",
+      "expiry": "2028-04-20",
+      "roverId": "28d6518c-2219-4eaf-988b-8891b9bec5ff"
+    },
+    {
+      "make": "Suzuki",
+      "model": "Jimny Sierra",
+      "code": "JB43",
+      "category": "オフロード",
+      "year": "2004–2018",
+      "engines": [
+        {
+          "code": "K6A",
+          "ok": true
+        }
+      ],
+      "mileageLimit": "制限なし",
+      "sev": "SEV-DEMO-0701",
+      "expiry": "2025-12-31",
+      "roverId": "2030b9eb-60cb-441f-a923-c233f34fb0aa"
+    },
+    {
+      "make": "Suzuki",
+      "model": "Cappuccino",
+      "code": "EA11R",
+      "category": "軽自動車",
+      "year": "1991–1997",
+      "engines": [
+        {
+          "code": "F6A Turbo",
+          "ok": true
+        }
+      ],
+      "mileageLimit": "100,000km以下",
+      "sev": "SEV-DEMO-0702",
+      "expiry": "2026-07-31",
+      "roverId": "a3eee035-5562-4c95-88ed-21f03874aba6"
+    },
+    {
+      "make": "Mercedes-Benz",
+      "model": "G-Class 500",
+      "code": "W463",
+      "category": "オフロード",
+      "year": "1999–2004",
+      "engines": [
+        {
+          "code": "M113 5.0L V8",
+          "ok": true
+        }
+      ],
+      "mileageLimit": "制限なし",
+      "sev": "SEV-DEMO-0801",
+      "expiry": "2027-09-09",
+      "roverId": "272cd981-3fb0-42b1-bc4d-5bf479b8de59"
+    },
+    {
+      "make": "BMW",
+      "model": "Z3 M Coupe",
+      "code": "E36/8",
+      "category": "パフォーマンス",
+      "year": "1998–2002",
+      "engines": [
+        {
+          "code": "S50B32",
+          "ok": true
+        },
+        {
+          "code": "M52B28",
+          "ok": false
+        }
+      ],
+      "mileageLimit": "制限なし",
+      "sev": "SEV-DEMO-0802",
+      "expiry": "2026-03-01",
+      "roverId": "05d3cf02-33e2-4f1c-936d-eaab181a3fad"
+    },
+    {
+      "make": "Land Rover",
+      "model": "Defender 90",
+      "code": "LD90",
+      "category": "オフロード",
+      "year": "1990–2016",
+      "engines": [
+        {
+          "code": "300Tdi",
+          "ok": true
+        },
+        {
+          "code": "Td5",
+          "ok": true
+        }
+      ],
+      "mileageLimit": "制限なし",
+      "sev": "SEV-DEMO-0901",
+      "expiry": "2029-06-15",
+      "roverId": "5d1d930a-2c17-487d-9837-666de33d5187"
+    },
+    {
+      "make": "Alpine",
+      "model": "A110",
+      "code": "PA1",
+      "category": "クラシック",
+      "year": "1985–1990",
+      "engines": [
+        {
+          "code": "810 1.6L I4",
+          "ok": true
+        }
+      ],
+      "mileageLimit": "制限なし",
+      "sev": "SEV-DEMO-1001",
+      "expiry": "2026-11-11",
+      "roverId": "6bf77c66-9011-430e-8a70-6f66c5b810cf"
+    },
+    {
+      "make": "Nissan",
+      "model": "Pao",
+      "code": "PK10",
+      "category": "クラシック",
+      "year": "1989–1990",
+      "engines": [
+        {
+          "code": "MA10S",
+          "ok": true
+        }
+      ],
+      "mileageLimit": "制限なし",
+      "sev": "SEV-DEMO-0105",
+      "expiry": "2028-02-02",
+      "roverId": "8069671b-a8d5-4095-a5cc-b690e8ae084b"
+    },
+    {
+      "make": "Nissan",
+      "model": "Figaro",
+      "code": "FK10",
+      "category": "クラシック",
+      "year": "1991",
+      "engines": [
+        {
+          "code": "MA10ET",
+          "ok": true
+        }
+      ],
+      "mileageLimit": "制限なし",
+      "sev": "SEV-DEMO-0106",
+      "expiry": "2026-09-01",
+      "roverId": "9c4eb955-3a7e-4add-8edd-38cb15bbbf55"
+    },
+    {
+      "make": "Toyota",
+      "model": "GR Yaris",
+      "code": "GXPA16",
+      "category": "パフォーマンス",
+      "year": "2020–2023",
+      "engines": [
+        {
+          "code": "G16E-GTS",
+          "ok": true
+        },
+        {
+          "code": "M15A-FKS",
+          "ok": false
+        }
+      ],
+      "mileageLimit": "制限なし",
+      "sev": "SEV-DEMO-1101",
+      "expiry": "2026-08-10",
+      "roverId": "62c7b3b4-d263-4abd-a1ef-1ed3e0050c5a"
+    }
+  ]
+}
