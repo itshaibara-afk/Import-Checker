@@ -1,0 +1,80 @@
+name: Update SEV data and deploy
+
+on:
+  schedule:
+    # 毎日 19:00 UTC = 豪州東部標準時(AEST, UTC+10)の朝5:00頃
+    - cron: "0 19 * * *"
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install scraper dependencies
+        run: |
+          pip install -r scraper/requirements.txt
+          playwright install --with-deps chromium
+
+      - name: Run ROVER scraper
+        run: |
+          cd scraper
+          python scrape_rover.py --out ../data/sev-data.json
+        continue-on-error: false
+
+      - name: Commit updated data (if changed)
+        run: |
+          git config user.name "sev-register-bot"
+          git config user.email "actions@users.noreply.github.com"
+          if git diff --quiet -- data/sev-data.json; then
+            echo "No data changes."
+          else
+            git add data/sev-data.json
+            git commit -m "chore: daily SEV data update ($(date -u +%Y-%m-%d))"
+            git push
+          fi
+
+  deploy:
+    needs: scrape
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Assemble publish directory
+        run: |
+          mkdir -p public/data
+          cp site/index.html public/index.html
+          cp data/sev-data.json public/data/sev-data.json
+          if [ -f data/market-data.json ]; then
+            cp data/market-data.json public/data/market-data.json
+          fi
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
