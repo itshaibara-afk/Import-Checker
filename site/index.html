@@ -352,6 +352,35 @@
     border-radius:var(--radius);
   }
 
+  /* Pagination */
+  .pagination{
+    display:flex;justify-content:center;align-items:center;
+    flex-wrap:wrap;gap:6px;margin-top:18px;
+  }
+  .pagination button{
+    min-width:38px;height:38px;
+    border:1px solid var(--border);
+    background:var(--surface);
+    color:var(--text);
+    border-radius:8px;
+    font-size:0.88rem;
+    cursor:pointer;
+    padding:0 10px;
+  }
+  .pagination button:hover:not(:disabled):not(.current){
+    border-color:var(--accent);color:var(--accent);
+  }
+  .pagination button.current{
+    background:var(--accent);border-color:var(--accent);color:#fff;
+    font-weight:600;cursor:default;
+  }
+  .pagination button:disabled{
+    opacity:0.4;cursor:default;
+  }
+  .pagination .ellipsis{
+    color:var(--text-muted);padding:0 4px;user-select:none;
+  }
+
   footer{margin-top:32px;font-size:0.78rem;color:var(--text-muted);text-align:center;}
 
   @media (max-width:900px){
@@ -433,6 +462,8 @@
     条件に一致する車両が見つかりませんでした。検索語を短くするか、別のフィルターを試してください。
   </div>
 
+  <div class="pagination" id="pagination"></div>
+
   <footer>
     非公式ミラーサイト / データソース: <a href="https://www.rover.infrastructure.gov.au/PublishedApprovals/SEVApprovals/" target="_blank" rel="noopener">ROVER公式サイト</a>（毎日自動取得）/ 公式登録簿ではありません
   </footer>
@@ -452,6 +483,8 @@ let MARKET_DATA = null; // 任意: data/market-data.json（存在すれば読み
 let activeCategory = "すべて";
 let activeStatus = "すべて";
 let fuse = null;
+let currentPage = 1;
+const PAGE_SIZE = 10;
 
 const searchInput = document.getElementById("searchInput");
 const clearBtn = document.getElementById("clearBtn");
@@ -501,6 +534,7 @@ function renderChips(){
     chip.textContent = cat;
     chip.addEventListener("click", () => {
       activeCategory = cat;
+      currentPage = 1;
       renderChips();
       runSearch();
     });
@@ -520,6 +554,7 @@ function renderChips(){
     chip.innerHTML = (opt.color ? `<span class="dot" style="background:${opt.color}"></span>` : "") + opt.label;
     chip.addEventListener("click", () => {
       activeStatus = opt.key;
+      currentPage = 1;
       renderChips();
       runSearch();
     });
@@ -878,12 +913,26 @@ function runSearch(){
     results = results.filter(d => getStatus(d.expiry).key === activeStatus);
   }
 
-  resultCount.textContent = results.length + "件表示中" + (query ? `（検索語: 「${escapeHtml(query)}」）` : "");
+  // ページネーション
+  const total = results.length;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if(currentPage > totalPages) currentPage = totalPages;
+  if(currentPage < 1) currentPage = 1;
+  const startIdx = (currentPage - 1) * PAGE_SIZE;
+  const pageResults = results.slice(startIdx, startIdx + PAGE_SIZE);
+
+  if(total === 0){
+    resultCount.textContent = "0件" + (query ? `（検索語: 「${escapeHtml(query)}」）` : "");
+  }else{
+    resultCount.textContent = `全${total}件中 ${startIdx + 1}〜${startIdx + pageResults.length}件を表示` +
+      (query ? `（検索語: 「${escapeHtml(query)}」）` : "");
+  }
 
   tableBody.innerHTML = "";
   cardsView.innerHTML = "";
+  renderPagination(totalPages);
 
-  if(results.length === 0){
+  if(total === 0){
     emptyState.style.display = "block";
     document.querySelector(".table-scroll").style.visibility = "hidden";
     return;
@@ -891,7 +940,7 @@ function runSearch(){
   emptyState.style.display = "none";
   document.querySelector(".table-scroll").style.visibility = "visible";
 
-  results.forEach(item => {
+  pageResults.forEach(item => {
     const label = `${item.make} ${item.model} の詳細を見る`;
 
     // table row
@@ -944,9 +993,64 @@ function runSearch(){
   });
 }
 
-searchInput.addEventListener("input", runSearch);
+const paginationEl = document.getElementById("pagination");
+
+function goToPage(p){
+  currentPage = p;
+  runSearch();
+  // ページ切り替え後、一覧の先頭が見えるようにスクロール
+  const anchor = document.querySelector(".meta-row");
+  if(anchor) anchor.scrollIntoView({behavior:"smooth", block:"start"});
+}
+
+function renderPagination(totalPages){
+  paginationEl.innerHTML = "";
+  if(totalPages <= 1) return;
+
+  const addBtn = (label, page, opts = {}) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = label;
+    if(opts.current) btn.classList.add("current");
+    if(opts.disabled) btn.disabled = true;
+    if(!opts.current && !opts.disabled){
+      btn.addEventListener("click", () => goToPage(page));
+    }
+    if(opts.ariaLabel) btn.setAttribute("aria-label", opts.ariaLabel);
+    paginationEl.appendChild(btn);
+  };
+  const addEllipsis = () => {
+    const span = document.createElement("span");
+    span.className = "ellipsis";
+    span.textContent = "…";
+    paginationEl.appendChild(span);
+  };
+
+  addBtn("‹", currentPage - 1, {disabled: currentPage === 1, ariaLabel: "前のページ"});
+
+  // 表示するページ番号: 1, 最後, 現在±2（間は…で省略）
+  const pages = new Set([1, totalPages]);
+  for(let p = currentPage - 2; p <= currentPage + 2; p++){
+    if(p >= 1 && p <= totalPages) pages.add(p);
+  }
+  const sorted = [...pages].sort((a, b) => a - b);
+  let prev = 0;
+  for(const p of sorted){
+    if(p - prev > 1) addEllipsis();
+    addBtn(String(p), p, {current: p === currentPage});
+    prev = p;
+  }
+
+  addBtn("›", currentPage + 1, {disabled: currentPage === totalPages, ariaLabel: "次のページ"});
+}
+
+searchInput.addEventListener("input", () => {
+  currentPage = 1;
+  runSearch();
+});
 clearBtn.addEventListener("click", () => {
   searchInput.value = "";
+  currentPage = 1;
   runSearch();
   searchInput.focus();
 });
