@@ -1,1142 +1,520 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SEV検索 - 非公式ミラー</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/fuse.js/7.0.0/fuse.min.js"></script>
-<style>
-  :root{
-    --bg:#f6f7f5;
-    --surface:#ffffff;
-    --surface-alt:#f0f1ee;
-    --border:#dcdfd9;
-    --text:#1f2420;
-    --text-muted:#5c6259;
-    --accent:#2f6f4f;
-    --accent-hover:#255a40;
-    --accent-soft:#e4f0e9;
-    --warn-bg:#fdf3e2;
-    --warn-border:#e8c477;
-    --warn-text:#6b4d0f;
-    --mark-bg:#fde68a;
-    --shadow:0 1px 2px rgba(0,0,0,0.04), 0 2px 8px rgba(0,0,0,0.05);
-    --radius:10px;
+#!/usr/bin/env python3
+"""
+scrape_rover.py — ROVER (Specialist and Enthusiast Vehicles Register) の一覧を
+取得して data/sev-data.json 用のJSONを生成するスクレイパー。(version 4)
 
-    --ok-bg:#e3f3e6; --ok-border:#8fcf9c; --ok-text:#1e6b34;
-    --soon-bg:#fdf3d6; --soon-border:#e8c95a; --soon-text:#7a5c0a;
-    --exp-bg:#fbe4e2; --exp-border:#e8938c; --exp-text:#a3271d;
-    --eng-no-bg:#f0f1ee; --eng-no-text:#8a9086;
-  }
-  [data-theme="dark"]{
-    --bg:#141815;
-    --surface:#1c211d;
-    --surface-alt:#232922;
-    --border:#333b32;
-    --text:#eef1ec;
-    --text-muted:#a3ab9d;
-    --accent:#4fae7c;
-    --accent-hover:#5fc18d;
-    --accent-soft:#1f3327;
-    --warn-bg:#3a2f13;
-    --warn-border:#7a5c1e;
-    --warn-text:#eccd82;
-    --mark-bg:#8a6d1a;
-    --shadow:0 1px 2px rgba(0,0,0,0.3), 0 2px 10px rgba(0,0,0,0.35);
+v4での追加: モデルレポート（MREApprovals）も取得し、詳細ページから
+走行距離制限（odometer limit）と参照SEV番号を抽出して、SEV番号で
+車両データに自動結合します。走行距離制限はSEV登録ではなくモデルレポート
+（RAWS工場ごとの適合承認）側に定められているため、この結合が必要です。
 
-    --ok-bg:#173322; --ok-border:#2f6b47; --ok-text:#7fdb9a;
-    --soon-bg:#3a2f10; --soon-border:#7a5c1e; --soon-text:#f0cf6c;
-    --exp-bg:#3a1a17; --exp-border:#8a352b; --exp-text:#f0958a;
-    --eng-no-bg:#232922; --eng-no-text:#7c8477;
-  }
-  *{box-sizing:border-box;}
-  body{
-    margin:0;
-    font-family:"Hiragino Sans","Noto Sans JP",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-    background:var(--bg);
-    color:var(--text);
-    line-height:1.6;
-  }
-  .wrap{max-width:1180px;margin:0 auto;padding:24px 20px 64px;}
+実際のROVER一覧の列構成（スクリーンショットで確認済み）:
+    SEV番号(リンク) | メーカー | モデル | カテゴリ | 型式 | 製造開始(MM/YYYY)
+    | 製造終了(MM/YYYY または "No end date") | 期限日(DD/MM/YYYY) | 展開ボタン
 
-  header.top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:16px;}
-  h1{font-size:1.5rem;margin:0 0 4px;}
-  .sub{color:var(--text-muted);font-size:0.9rem;margin:0;}
+列見出しの文言に頼らず、各セルの中身のパターン（"SEV-" で始まる、日付形式
+など）からフィールドを自動判別します。ページ送りは数字リンク方式に対応。
 
-  .theme-btn{
-    border:1px solid var(--border);
-    background:var(--surface);
-    color:var(--text);
-    border-radius:8px;
-    padding:8px 12px;
-    font-size:0.85rem;
-    cursor:pointer;
-    white-space:nowrap;
-  }
-  .theme-btn:hover{background:var(--surface-alt);}
+使い方
+------
+    pip install -r requirements.txt
+    playwright install --with-deps chromium
+    python scrape_rover.py --out ../data/sev-data.json
+    python scrape_rover.py --out ../data/sev-data.json --limit 20 --headful
+    python scrape_rover.py --out ../data/sev-data.json --skip-mre   # モデルレポートを取らない
+"""
 
-  .banner{
-    background:var(--warn-bg);
-    border:1px solid var(--warn-border);
-    color:var(--warn-text);
-    border-radius:var(--radius);
-    padding:12px 16px;
-    font-size:0.85rem;
-    margin-bottom:20px;
-  }
-  .banner strong{display:block;margin-bottom:2px;}
+import argparse
+import asyncio
+import json
+import re
+import sys
+from datetime import datetime, timezone
+from urllib.parse import urljoin, urlparse, parse_qs
 
-  .search-panel{
-    background:var(--surface);
-    border:1px solid var(--border);
-    border-radius:var(--radius);
-    padding:16px;
-    box-shadow:var(--shadow);
-    margin-bottom:16px;
-  }
-  .search-box{position:relative;}
-  .search-box input{
-    width:100%;
-    padding:12px 40px 12px 14px;
-    font-size:1rem;
-    border:1px solid var(--border);
-    border-radius:8px;
-    background:var(--surface);
-    color:var(--text);
-  }
-  .search-box input:focus{outline:2px solid var(--accent);outline-offset:1px;}
-  .search-box .clear-btn{
-    position:absolute;right:8px;top:50%;transform:translateY(-50%);
-    border:none;background:transparent;color:var(--text-muted);cursor:pointer;
-    font-size:1rem;padding:4px 8px;display:none;
-  }
+from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 
-  .filter-group{margin-top:14px;}
-  .filter-label{font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px;}
-  .chips{display:flex;flex-wrap:wrap;gap:8px;}
-  .chip{
-    border:1px solid var(--border);
-    background:var(--surface-alt);
-    color:var(--text-muted);
-    border-radius:999px;
-    padding:6px 12px;
-    font-size:0.8rem;
-    cursor:pointer;
-    user-select:none;
-    display:flex;align-items:center;gap:6px;
-  }
-  .chip .dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
-  .chip.active{background:var(--accent);border-color:var(--accent);color:#fff;}
-  .chip.active .dot{filter:brightness(1.4);}
+BASE_URL = "https://www.rover.infrastructure.gov.au"
+LIST_URL = f"{BASE_URL}/PublishedApprovals/SEVApprovals/"
+MRE_LIST_URL = f"{BASE_URL}/PublishedApprovals/MREApprovals/"
+MRE_DETAIL_URL = f"{BASE_URL}/PublishedApprovals/ModelReportDetails/?id="
 
-  .legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:12px;font-size:0.78rem;color:var(--text-muted);}
-  .legend span{display:inline-flex;align-items:center;gap:6px;}
-  .legend .dot{width:9px;height:9px;border-radius:50%;display:inline-block;}
+# セル内容のパターン
+RE_SEV = re.compile(r"^SEV-\d+", re.I)
+RE_MRE = re.compile(r"^MRE-\d+", re.I)
+RE_MONTH_YEAR = re.compile(r"^(\d{1,2})/(\d{4})$")          # 例: 08/2018
+RE_FULL_DATE = re.compile(r"^(\d{1,2})/(\d{1,2})/(\d{4})$")  # 例: 16/07/2026
+RE_NO_END = re.compile(r"^no\s*end\s*date$", re.I)
+# カテゴリ例: "NA - Light Goods Vehicle", "LC - Motor Cycle"
+RE_CATEGORY = re.compile(r"^[A-Z]{1,2}\d?\s*-\s*.+", re.I)
+# モデルレポート一覧のステータス値
+RE_MRE_STATUS = re.compile(r"^(in force|revoked|suspended|expired|lapsed)$", re.I)
+# 詳細ページ本文からの抽出用
+RE_SEV_REF = re.compile(r"SEV-\d{4,6}")
+RE_ODOMETER = re.compile(
+    r"odometer[^.<]{0,120}?([\d,]{3,})\s*(?:kilometres|kilometers|kms?)\b",
+    re.I,
+)
 
-  .meta-row{
-    display:flex;justify-content:space-between;align-items:center;
-    margin:16px 0 8px;
-    font-size:0.85rem;color:var(--text-muted);
-    flex-wrap:wrap;gap:8px;
-  }
 
-  .table-scroll{overflow-x:auto;border-radius:var(--radius);box-shadow:var(--shadow);}
-  table{width:100%;border-collapse:collapse;background:var(--surface);min-width:1020px;}
-  thead th{
-    text-align:left;
-    font-size:0.72rem;
-    text-transform:uppercase;
-    letter-spacing:0.03em;
-    color:var(--text-muted);
-    background:var(--surface-alt);
-    padding:10px 12px;
-    border-bottom:1px solid var(--border);
-    white-space:nowrap;
-  }
-  tbody td{
-    padding:12px;
-    border-bottom:1px solid var(--border);
-    font-size:0.9rem;
-    vertical-align:top;
-  }
-  tbody tr:last-child td{border-bottom:none;}
-  tbody tr:hover{background:var(--surface-alt);}
-  .muted-small{color:var(--text-muted);font-size:0.78rem;}
-  .cat-tag{
-    display:inline-block;
-    background:var(--accent-soft);
-    color:var(--accent);
-    border-radius:6px;
-    padding:2px 8px;
-    font-size:0.75rem;
-    white-space:nowrap;
-  }
-  mark{background:var(--mark-bg);color:inherit;border-radius:3px;padding:0 1px;}
-  .year-badge{
-    display:inline-block;
-    font-weight:600;
-    font-size:0.85rem;
-    color:var(--text);
-    background:var(--surface-alt);
-    border:1px solid var(--border);
-    border-radius:6px;
-    padding:3px 9px;
-    white-space:nowrap;
-    font-variant-numeric:tabular-nums;
-  }
-  .sev-cell{display:flex;align-items:center;gap:6px;font-variant-numeric:tabular-nums;}
-  .copy-btn{
-    border:1px solid var(--border);
-    background:var(--surface);
-    color:var(--text-muted);
-    border-radius:6px;
-    padding:2px 6px;
-    font-size:0.7rem;
-    cursor:pointer;
-  }
-  .copy-btn:hover{color:var(--accent);border-color:var(--accent);}
-  .copy-btn.copied{color:var(--accent);border-color:var(--accent);}
+def now_iso():
+    return datetime.now(timezone.utc).isoformat()
 
-  .engine-tags{display:flex;flex-wrap:wrap;gap:4px;}
-  .eng{
-    font-size:0.72rem;
-    border-radius:6px;
-    padding:2px 6px;
-    white-space:nowrap;
-    border:1px solid transparent;
-  }
-  .eng.ok{background:var(--ok-bg);color:var(--ok-text);border-color:var(--ok-border);}
-  .eng.ng{background:var(--eng-no-bg);color:var(--eng-no-text);text-decoration:line-through;}
 
-  .status-badge{
-    display:inline-flex;flex-direction:column;gap:2px;
-    border-radius:8px;padding:6px 10px;font-size:0.78rem;border:1px solid transparent;line-height:1.35;
-  }
-  .status-badge .s-label{font-weight:600;display:flex;align-items:center;gap:6px;}
-  .status-badge .s-label .dot{width:8px;height:8px;border-radius:50%;}
-  .status-badge.valid{background:var(--ok-bg);color:var(--ok-text);border-color:var(--ok-border);}
-  .status-badge.valid .dot{background:var(--ok-text);}
-  .status-badge.soon{background:var(--soon-bg);color:var(--soon-text);border-color:var(--soon-border);}
-  .status-badge.soon .dot{background:var(--soon-text);}
-  .status-badge.expired{background:var(--exp-bg);color:var(--exp-text);border-color:var(--exp-border);}
-  .status-badge.expired .dot{background:var(--exp-text);}
-  .status-badge.unknown{background:var(--surface-alt);color:var(--text-muted);border-color:var(--border);}
-  .status-badge.unknown .dot{background:var(--text-muted);}
+def to_iso_date(dd, mm, yyyy):
+    return f"{int(yyyy):04d}-{int(mm):02d}-{int(dd):02d}"
 
-  /* Cards for mobile */
-  .cards{display:none;flex-direction:column;gap:10px;}
-  .card{
-    background:var(--surface);
-    border:1px solid var(--border);
-    border-radius:var(--radius);
-    padding:14px;
-    box-shadow:var(--shadow);
-  }
-  .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px;}
-  .card-title{font-weight:600;font-size:1rem;}
-  .card-row{display:flex;justify-content:space-between;gap:10px;font-size:0.85rem;padding:6px 0;border-top:1px dashed var(--border);}
-  .card-row:first-of-type{border-top:none;}
-  .card-row .label{color:var(--text-muted);flex-shrink:0;}
-  .card-row .val{text-align:right;}
 
-  tbody tr{cursor:pointer;}
-  tbody tr:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;}
-  .card{cursor:pointer;}
-  .card:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;}
-  .detail-link{
-    display:inline-block;margin-top:4px;
-    background:none;border:none;padding:0;
-    color:var(--accent);font-size:0.78rem;cursor:pointer;
-  }
-  .detail-link:hover{color:var(--accent-hover);text-decoration:underline;}
+async def find_results_table(page):
+    """検索結果テーブルが表示されるまで待つ。必要なら検索ボタンを押す。"""
+    try:
+        await page.wait_for_selector("table tbody tr", timeout=15000)
+        return
+    except PlaywrightTimeoutError:
+        pass
 
-  /* Detail modal */
-  .modal-overlay{
-    position:fixed;inset:0;background:rgba(20,24,20,0.5);
-    display:flex;align-items:flex-start;justify-content:center;
-    padding:5vh 16px;overflow-y:auto;z-index:50;
-  }
-  .modal-overlay[hidden]{display:none;}
-  .modal-panel{
-    background:var(--surface);
-    border:1px solid var(--border);
-    border-radius:14px;
-    max-width:640px;width:100%;
-    padding:24px;
-    box-shadow:0 8px 30px rgba(0,0,0,0.25);
-    position:relative;
-  }
-  .modal-close{
-    position:absolute;top:14px;right:14px;
-    border:1px solid var(--border);background:var(--surface-alt);color:var(--text);
-    border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:0.9rem;
-  }
-  .modal-close:hover{color:var(--accent);border-color:var(--accent);}
-  .modal-header{margin-bottom:14px;padding-right:36px;}
-  .modal-header h2{margin:0 0 4px;font-size:1.25rem;}
-  .modal-header .modal-sub{color:var(--text-muted);font-size:0.85rem;}
-  .modal-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin:16px 0;}
-  .modal-field{background:var(--surface-alt);border:1px solid var(--border);border-radius:8px;padding:10px 12px;}
-  .modal-field .f-label{font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.03em;margin-bottom:4px;}
-  .modal-field.span-2{grid-column:1 / -1;}
-  .modal-actions{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0 8px;}
-  .modal-actions a, .modal-actions button{
-    border:1px solid var(--border);background:var(--surface-alt);color:var(--text);
-    border-radius:8px;padding:8px 14px;font-size:0.85rem;cursor:pointer;text-decoration:none;
-  }
-  .modal-actions a:hover, .modal-actions button:hover{border-color:var(--accent);color:var(--accent);}
-  .similar-section{margin-top:20px;padding-top:16px;border-top:1px solid var(--border);}
-  .similar-section h3{font-size:0.9rem;margin:0 0 10px;color:var(--text-muted);font-weight:600;}
-  .similar-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
-  .similar-item{
-    text-align:left;
-    background:var(--surface-alt);border:1px solid var(--border);border-radius:8px;
-    padding:10px 12px;cursor:pointer;font-size:0.82rem;
-  }
-  .similar-item:hover{border-color:var(--accent);}
-  .similar-item .si-title{font-weight:600;margin-bottom:4px;}
-  .similar-item .si-meta{display:flex;justify-content:space-between;align-items:center;gap:6px;color:var(--text-muted);font-size:0.75rem;}
-  @media (max-width:480px){
-    .modal-grid{grid-template-columns:1fr;}
-    .similar-grid{grid-template-columns:1fr;}
-  }
+    for text in ["Search", "Show all", "View all", "Submit", "検索"]:
+        try:
+            btn = page.get_by_role("button", name=re.compile(text, re.I))
+            if await btn.count() > 0:
+                await btn.first.click()
+                await page.wait_for_selector("table tbody tr", timeout=15000)
+                return
+        except Exception:
+            continue
 
-  /* Market price section */
-  .market-section{margin-top:20px;padding-top:16px;border-top:1px solid var(--border);}
-  .market-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:4px;flex-wrap:wrap;}
-  .market-head h3{font-size:0.9rem;margin:0;color:var(--text-muted);font-weight:600;}
-  .market-toggle-btn{
-    border:1px solid var(--border);background:var(--surface-alt);color:var(--text);
-    border-radius:8px;padding:5px 10px;font-size:0.75rem;cursor:pointer;
-  }
-  .market-toggle-btn:hover{border-color:var(--accent);color:var(--accent);}
-  .market-note{font-size:0.75rem;color:var(--text-muted);margin:2px 0 12px;}
-  .market-agg{
-    display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;
-    background:var(--surface-alt);border:1px solid var(--border);border-radius:8px;
-    padding:10px 12px;margin-bottom:12px;
-  }
-  .market-agg .agg-value{font-size:1.35rem;font-weight:600;}
-  .market-agg .agg-delta{font-size:0.8rem;color:var(--text-muted);}
-  .market-agg .agg-sub{font-size:0.75rem;color:var(--text-muted);width:100%;}
+    raise RuntimeError(
+        "結果テーブルが見つかりませんでした。--headful で実行して画面を確認してください。"
+    )
 
-  .state-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
-  @media (max-width:720px){.state-grid{grid-template-columns:repeat(2,1fr);}}
-  @media (max-width:420px){.state-grid{grid-template-columns:1fr 1fr;}}
 
-  .state-tile{
-    background:var(--surface-alt);border:1px solid var(--border);border-radius:8px;
-    padding:10px 10px 8px;position:relative;
-  }
-  .state-tile .st-label{font-size:0.78rem;font-weight:600;display:flex;justify-content:space-between;align-items:center;}
-  .state-tile .st-value{font-size:1rem;font-weight:600;margin-top:4px;}
-  .state-tile .st-delta{font-size:0.72rem;color:var(--text-muted);margin-top:1px;}
-  .state-tile .st-count{font-size:0.7rem;color:var(--text-muted);margin-top:2px;}
-  .state-tile .st-empty{font-size:0.75rem;color:var(--text-muted);margin-top:10px;padding:8px 0;text-align:center;}
-  .state-tile svg{display:block;margin-top:6px;overflow:visible;}
-  .state-tile .spark-pt{cursor:pointer;}
-  .state-tile .spark-pt:focus{outline:2px solid var(--accent);outline-offset:1px;}
+async def extract_row_link_id(row):
+    """行内のリンク(詳細ページへのhref)から id= のGUIDを取り出す。"""
+    links = row.locator("a")
+    n = await links.count()
+    for i in range(n):
+        href = await links.nth(i).get_attribute("href")
+        if not href:
+            continue
+        full = urljoin(BASE_URL, href)
+        qs = parse_qs(urlparse(full).query)
+        if "id" in qs and qs["id"]:
+            return qs["id"][0]
+    return None
 
-  .market-table-wrap{margin-top:10px;overflow-x:auto;}
-  .market-table{width:100%;border-collapse:collapse;font-size:0.78rem;}
-  .market-table th, .market-table td{padding:6px 8px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap;}
-  .market-table th:first-child, .market-table td:first-child{text-align:left;}
-  .market-table thead th{color:var(--text-muted);font-weight:600;background:var(--surface-alt);}
 
-  .empty{
-    text-align:center;
-    padding:48px 16px;
-    color:var(--text-muted);
-    background:var(--surface);
-    border:1px dashed var(--border);
-    border-radius:var(--radius);
-  }
+def classify_cells(cells):
+    """セル配列を中身のパターンで分類して record を組み立てる。
 
-  /* Pagination */
-  .pagination{
-    display:flex;justify-content:center;align-items:center;
-    flex-wrap:wrap;gap:6px;margin-top:18px;
-  }
-  .pagination button{
-    min-width:38px;height:38px;
-    border:1px solid var(--border);
-    background:var(--surface);
-    color:var(--text);
-    border-radius:8px;
-    font-size:0.88rem;
-    cursor:pointer;
-    padding:0 10px;
-  }
-  .pagination button:hover:not(:disabled):not(.current){
-    border-color:var(--accent);color:var(--accent);
-  }
-  .pagination button.current{
-    background:var(--accent);border-color:var(--accent);color:#fff;
-    font-weight:600;cursor:default;
-  }
-  .pagination button:disabled{
-    opacity:0.4;cursor:default;
-  }
-  .pagination .ellipsis{
-    color:var(--text-muted);padding:0 4px;user-select:none;
-  }
+    想定順: [SEV番号, メーカー, モデル, カテゴリ, 型式, 製造開始, 製造終了, 期限日, (空/ボタン列)]
+    ただし順番が多少変わっても動くよう、パターン優先で判定する。
+    """
+    record = {}
+    month_years = []   # MM/YYYY 形式（製造開始/終了）
+    no_end = False
+    texts = [c.strip() for c in cells]
 
-  footer{margin-top:32px;font-size:0.78rem;color:var(--text-muted);text-align:center;}
+    sev_idx = None
+    cat_idx = None
 
-  @media (max-width:900px){
-    .table-scroll{display:none;}
-    .cards{display:flex;}
-  }
-</style>
-</head>
-<body>
-<div class="wrap">
+    for idx, t in enumerate(texts):
+        if not t:
+            continue
+        if sev_idx is None and RE_SEV.match(t):
+            record["sev"] = t
+            sev_idx = idx
+            continue
+        m = RE_FULL_DATE.match(t)
+        if m:
+            record["expiry"] = to_iso_date(m.group(1), m.group(2), m.group(3))
+            continue
+        m = RE_MONTH_YEAR.match(t)
+        if m:
+            month_years.append((int(m.group(1)), int(m.group(2))))
+            continue
+        if RE_NO_END.match(t):
+            no_end = True
+            continue
+        if cat_idx is None and RE_CATEGORY.match(t) and len(t) > 6:
+            record["category"] = t
+            cat_idx = idx
+            continue
 
-  <header class="top">
-    <div>
-      <h1>SEV検索（非公式ミラー）</h1>
-      <p class="sub">Specialist &amp; Enthusiast Vehicles Register を検索しやすくした非公式サイト</p>
-    </div>
-    <button class="theme-btn" id="themeToggle">ダークモード</button>
-  </header>
+    # メーカー/モデル: SEV番号セルの直後2つ（無ければ先頭2つの非日付セル）
+    if sev_idx is not None:
+        if sev_idx + 1 < len(texts) and texts[sev_idx + 1]:
+            record["make"] = texts[sev_idx + 1]
+        if sev_idx + 2 < len(texts) and texts[sev_idx + 2]:
+            record["model"] = texts[sev_idx + 2]
 
-  <div class="banner">
-    <strong>これは非公式のミラーサイトです</strong>
-    ROVER公式サイトのSEV登録データを毎日自動的に取り込んで表示しています。政府の公式登録簿ではないため、実際の輸入可否判断は必ず<a href="https://www.rover.infrastructure.gov.au/PublishedApprovals/SEVApprovals/" target="_blank" rel="noopener">ROVER公式サイト</a>で確認してください。データの取得時刻はページ下部に表示しています。
-  </div>
+    # 型式: カテゴリセルの直後
+    if cat_idx is not None and cat_idx + 1 < len(texts) and texts[cat_idx + 1]:
+        candidate = texts[cat_idx + 1]
+        if not RE_MONTH_YEAR.match(candidate) and not RE_FULL_DATE.match(candidate) and not RE_NO_END.match(candidate):
+            record["code"] = candidate
 
-  <div class="banner" id="loadError" hidden>
-    <strong>データを読み込めませんでした</strong>
-    <span id="loadErrorDetail">data/sev-data.json の取得に失敗しました。初回のGitHub Actions実行がまだ完了していない可能性があります。</span>
-  </div>
+    # 年式: 製造開始〜終了
+    if month_years:
+        start_year = month_years[0][1]
+        record["buildStart"] = f"{month_years[0][1]:04d}-{month_years[0][0]:02d}"
+        if len(month_years) >= 2:
+            end_year = month_years[1][1]
+            record["buildEnd"] = f"{month_years[1][1]:04d}-{month_years[1][0]:02d}"
+            record["year"] = f"{start_year}–{end_year}" if start_year != end_year else f"{start_year}"
+        elif no_end:
+            record["year"] = f"{start_year}"
+            record["buildEnd"] = None
+        else:
+            record["year"] = f"{start_year}"
 
-  <div class="search-panel">
-    <div class="search-box">
-      <input type="text" id="searchInput" placeholder="メーカー・車種・型式・エンジン・SEV番号で検索（あいまい検索対応）" autocomplete="off">
-      <button class="clear-btn" id="clearBtn" aria-label="クリア">✕</button>
-    </div>
+    return record
 
-    <div class="filter-group">
-      <div class="filter-label">カテゴリ</div>
-      <div class="chips" id="categoryChips"></div>
-    </div>
 
-    <div class="filter-group">
-      <div class="filter-label">有効期限の状態</div>
-      <div class="chips" id="statusChips"></div>
-    </div>
+async def scrape_list_page(page, log_sample=False):
+    """現在表示中の1ページ分の結果テーブルを構造化データに変換する。"""
+    rows = page.locator("table tbody tr")
+    count = await rows.count()
+    results = []
+    for i in range(count):
+        row = rows.nth(i)
+        cells = await row.locator("td").all_inner_texts()
+        record = classify_cells(cells)
+        rover_id = await extract_row_link_id(row)
+        if rover_id:
+            record["roverId"] = rover_id
+        if log_sample and i < 2:
+            print(f"[scrape_rover] sample raw cells: {[c.strip() for c in cells]}", file=sys.stderr)
+            print(f"[scrape_rover] sample parsed:    {record}", file=sys.stderr)
+        # SEV番号かroverIdのどちらかが取れている行だけを有効とみなす
+        if record.get("sev") or record.get("roverId"):
+            results.append(record)
+    return results
 
-    <div class="legend">
-      <span><span class="dot" style="background:var(--ok-text)"></span>有効（3ヶ月超）</span>
-      <span><span class="dot" style="background:var(--soon-text)"></span>まもなく失効（3ヶ月以内）</span>
-      <span><span class="dot" style="background:var(--exp-text)"></span>失効済み</span>
-    </div>
-  </div>
 
-  <div class="meta-row">
-    <span id="resultCount">読み込み中…</span>
-    <span id="updatedAtText">データ最終更新: 取得中… / 期限判定は表示時点の日付で自動計算</span>
-  </div>
+async def first_row_signature(page):
+    """ページが切り替わったことを検知するための、先頭行のテキスト。"""
+    try:
+        row = page.locator("table tbody tr").first
+        return (await row.inner_text()).strip()[:120]
+    except Exception:
+        return ""
 
-  <div class="table-scroll">
-    <table id="resultsTable">
-      <thead>
-        <tr>
-          <th>メーカー / モデル</th>
-          <th>型式コード</th>
-          <th>年式</th>
-          <th>カテゴリ</th>
-          <th>適合エンジン</th>
-          <th>走行距離制限</th>
-          <th>SEV番号</th>
-          <th>有効期限</th>
-        </tr>
-      </thead>
-      <tbody id="tableBody"></tbody>
-    </table>
-  </div>
 
-  <div class="cards" id="cardsView"></div>
+async def wait_for_page_change(page, old_signature, timeout_ms=10000):
+    """先頭行の内容が変わるまで待つ。変わったらTrue。"""
+    elapsed = 0
+    step = 400
+    while elapsed < timeout_ms:
+        await page.wait_for_timeout(step)
+        elapsed += step
+        sig = await first_row_signature(page)
+        if sig and sig != old_signature:
+            return True
+    return False
 
-  <div class="empty" id="emptyState" style="display:none;">
-    条件に一致する車両が見つかりませんでした。検索語を短くするか、別のフィルターを試してください。
-  </div>
 
-  <div class="pagination" id="pagination"></div>
+async def go_to_next_page(page, current_page_num):
+    """次ページへ移動。成功したらTrue。数字リンク（1 2 3 ... >）方式に対応。"""
+    old_sig = await first_row_signature(page)
+    next_num = str(current_page_num + 1)
 
-  <footer>
-    非公式ミラーサイト / データソース: <a href="https://www.rover.infrastructure.gov.au/PublishedApprovals/SEVApprovals/" target="_blank" rel="noopener">ROVER公式サイト</a>（毎日自動取得）/ 公式登録簿ではありません
-  </footer>
-</div>
+    # 方式1: 「>」やNextの明示的なリンク/ボタン
+    for name in [">", "Next", "Next page", "次へ"]:
+        for role in ("link", "button"):
+            try:
+                btn = page.get_by_role(role, name=re.compile(f"^{re.escape(name)}$", re.I))
+                if await btn.count() > 0:
+                    first = btn.first
+                    classes = ((await first.get_attribute("class")) or "").lower()
+                    aria_dis = await first.get_attribute("aria-disabled")
+                    if "disabled" in classes or aria_dis == "true":
+                        continue
+                    await first.click()
+                    if await wait_for_page_change(page, old_sig):
+                        print(f"[scrape_rover] pagination: clicked '{name}' ({role}) -> page {next_num}", file=sys.stderr)
+                        return True
+            except Exception:
+                continue
 
-<div class="modal-overlay" id="modalOverlay" hidden>
-  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
-    <button class="modal-close" id="modalClose" aria-label="閉じる">✕</button>
-    <div id="modalContent"></div>
-  </div>
-</div>
+    # 方式2: 次のページ番号のリンク
+    try:
+        num_link = page.get_by_role("link", name=re.compile(f"^{next_num}$"))
+        if await num_link.count() > 0:
+            await num_link.first.click()
+            if await wait_for_page_change(page, old_sig):
+                print(f"[scrape_rover] pagination: clicked number '{next_num}'", file=sys.stderr)
+                return True
+    except Exception:
+        pass
 
-<script>
-// ------- 実データ（data/sev-data.json から読み込み。GitHub Actionsが毎日更新） -------
-let DATA = [];          // 車両データ本体（読み込み後に差し替え）
-let MARKET_DATA = null; // 任意: data/market-data.json（存在すれば読み込み、無ければ null のまま）
-let activeCategory = "すべて";
-let activeStatus = "すべて";
-let fuse = null;
-let currentPage = 1;
-const PAGE_SIZE = 10;
+    # 方式3: role判定が効かないUI向けに、テキスト完全一致の任意要素をクリック
+    for target in [">", next_num]:
+        try:
+            el = page.locator(f"text=/^{re.escape(target)}$/").last
+            if await el.count() > 0:
+                await el.click()
+                if await wait_for_page_change(page, old_sig):
+                    print(f"[scrape_rover] pagination: clicked text '{target}'", file=sys.stderr)
+                    return True
+        except Exception:
+            continue
 
-const searchInput = document.getElementById("searchInput");
-const clearBtn = document.getElementById("clearBtn");
-const tableBody = document.getElementById("tableBody");
-const cardsView = document.getElementById("cardsView");
-const resultCount = document.getElementById("resultCount");
-const emptyState = document.getElementById("emptyState");
-const categoryChips = document.getElementById("categoryChips");
-const statusChips = document.getElementById("statusChips");
+    print(
+        f"[scrape_rover] pagination: could not move past page {current_page_num}. "
+        "If the register has more pages, run with --headful and inspect the pager UI.",
+        file=sys.stderr,
+    )
+    return False
 
-const STATUS_DEFS = {
-  valid:   {label:"有効",         color:"var(--ok-text)"},
-  soon:    {label:"まもなく失効", color:"var(--soon-text)"},
-  expired: {label:"失効済み",     color:"var(--exp-text)"},
-  unknown: {label:"期限不明",     color:"var(--text-muted)"},
-};
 
-function getStatus(expiryStr){
-  if(!expiryStr) return {key:"unknown", diffDays:null};
-  const now = new Date();
-  now.setHours(0,0,0,0);
-  const expiry = new Date(expiryStr + "T00:00:00");
-  if(isNaN(expiry.getTime())) return {key:"unknown", diffDays:null};
-  const diffDays = Math.round((expiry - now) / 86400000);
-  if(diffDays < 0) return {key:"expired", diffDays};
-  if(diffDays <= 90) return {key:"soon", diffDays};
-  return {key:"valid", diffDays};
-}
+def classify_mre_cells(cells):
+    """モデルレポート一覧の行を分類する。
+    フィルター項目から推定される列: 承認番号 | メーカー | モデル | タイプ | ステータス | 関連承認"""
+    record = {}
+    texts = [c.strip() for c in cells]
+    mre_idx = None
+    for idx, t in enumerate(texts):
+        if not t:
+            continue
+        if mre_idx is None and RE_MRE.match(t):
+            record["mre"] = t
+            mre_idx = idx
+            continue
+        if RE_MRE_STATUS.match(t):
+            record["status"] = t
+            continue
+        low = t.lower()
+        if "specialist" in low or "second stage" in low or "trailer" in low or "wheeled" in low:
+            record["type"] = t
+            continue
+    if mre_idx is not None:
+        if mre_idx + 1 < len(texts) and texts[mre_idx + 1]:
+            record["make"] = texts[mre_idx + 1]
+        if mre_idx + 2 < len(texts) and texts[mre_idx + 2]:
+            record["model"] = texts[mre_idx + 2]
+    return record
 
-function statusDateText(item, status){
-  if(status.key === "unknown") return "ROVER上に有効期限の記載がありません";
-  const d = new Date(item.expiry + "T00:00:00").toLocaleDateString("ja-JP");
-  if(status.key === "expired") return `${d}（${Math.abs(status.diffDays)}日前に失効）`;
-  if(status.key === "soon") return `${d}（あと${status.diffDays}日）`;
-  return `${d}まで有効`;
-}
 
-function getCategories(){
-  return ["すべて", ...new Set(DATA.map(d => d.category || "未分類"))];
-}
+def parse_mre_detail_html(html):
+    """モデルレポート詳細ページ(静的HTML)から走行距離制限と参照SEV番号を抽出。"""
+    result = {"sevRefs": [], "odometerLimitKm": None, "odometerText": None}
 
-function renderChips(){
-  categoryChips.innerHTML = "";
-  getCategories().forEach(cat => {
-    const chip = document.createElement("button");
-    chip.className = "chip" + (cat === activeCategory ? " active" : "");
-    chip.textContent = cat;
-    chip.addEventListener("click", () => {
-      activeCategory = cat;
-      currentPage = 1;
-      renderChips();
-      runSearch();
-    });
-    categoryChips.appendChild(chip);
-  });
+    # HTMLタグを落として素のテキストに近づける（正規表現ベースの簡易処理）
+    text = re.sub(r"<script[\s\S]*?</script>", " ", html, flags=re.I)
+    text = re.sub(r"<style[\s\S]*?</style>", " ", text, flags=re.I)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"&nbsp;?", " ", text)
+    text = re.sub(r"\s+", " ", text)
 
-  statusChips.innerHTML = "";
-  const statusOptions = [
-    {key:"すべて", label:"すべて", color:null},
-    {key:"valid", label:"有効", color:"var(--ok-text)"},
-    {key:"soon", label:"まもなく失効", color:"var(--soon-text)"},
-    {key:"expired", label:"失効済み", color:"var(--exp-text)"},
-  ];
-  statusOptions.forEach(opt => {
-    const chip = document.createElement("button");
-    chip.className = "chip" + (opt.key === activeStatus ? " active" : "");
-    chip.innerHTML = (opt.color ? `<span class="dot" style="background:${opt.color}"></span>` : "") + opt.label;
-    chip.addEventListener("click", () => {
-      activeStatus = opt.key;
-      currentPage = 1;
-      renderChips();
-      runSearch();
-    });
-    statusChips.appendChild(chip);
-  });
-}
+    refs = sorted(set(RE_SEV_REF.findall(text)))
+    result["sevRefs"] = refs
 
-function highlight(text, query){
-  const escaped = escapeHtml(text);
-  const q = (query || "").trim();
-  if(!q) return escaped;
-  try{
-    const re = new RegExp("(" + escapeHtml(q).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")", "ig");
-    return escaped.replace(re, "<mark>$1</mark>");
-  }catch(e){
-    return escaped;
-  }
-}
+    m = RE_ODOMETER.search(text)
+    if m:
+        try:
+            result["odometerLimitKm"] = int(m.group(1).replace(",", ""))
+        except ValueError:
+            pass
+        # 制限文の前後を短く切り出して原文として保持
+        start = max(0, m.start() - 60)
+        end = min(len(text), m.end() + 40)
+        result["odometerText"] = text[start:end].strip()
+    return result
 
-function escapeHtml(str){
-  if(str === undefined || str === null) return "";
-  return String(str).replace(/[&<>"']/g, m => ({
-    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
-  }[m]));
-}
 
-function copySev(sev, btn, evt){
-  if(evt) evt.stopPropagation();
-  navigator.clipboard.writeText(sev).then(() => {
-    const original = btn.textContent;
-    btn.textContent = "コピー済";
-    btn.classList.add("copied");
-    setTimeout(() => { btn.textContent = original; btn.classList.remove("copied"); }, 1200);
-  });
-}
+async def scrape_mre_list_page(page):
+    rows = page.locator("table tbody tr")
+    count = await rows.count()
+    results = []
+    for i in range(count):
+        row = rows.nth(i)
+        cells = await row.locator("td").all_inner_texts()
+        record = classify_mre_cells(cells)
+        rover_id = await extract_row_link_id(row)
+        if rover_id:
+            record["roverId"] = rover_id
+        if record.get("mre") or record.get("roverId"):
+            results.append(record)
+    return results
 
-function sevCellHtml(item, query){
-  if(!item.sev){
-    return `<span class="muted-small">SEV番号が取得できていません</span>`;
-  }
-  return `<div class="sev-cell">
-      <span>${highlight(item.sev, query || "")}</span>
-      <button class="copy-btn" type="button" data-copy="${escapeHtml(item.sev)}">コピー</button>
-    </div>`;
-}
 
-function idKeyOf(item){
-  // SEV番号が取れていない行でも一意に特定できるよう、無ければroverId、
-  // それも無ければ内部インデックスにフォールバックする。
-  return item.sev || item.roverId || ("row-" + (item._i != null ? item._i : ""));
-}
+async def scrape_model_reports(context, page, max_pages, detail_delay_ms=350):
+    """モデルレポート一覧を巡回し、詳細ページから走行距離制限とSEV参照を取得する。"""
+    print(f"[scrape_rover] opening {MRE_LIST_URL}", file=sys.stderr)
+    await page.goto(MRE_LIST_URL, wait_until="networkidle", timeout=45000)
+    try:
+        await find_results_table(page)
+    except RuntimeError as e:
+        print(f"[scrape_rover] MRE list: {e} -> skipping model reports", file=sys.stderr)
+        return []
 
-function itemId(item){
-  return encodeURIComponent(idKeyOf(item));
-}
+    all_reports = []
+    seen = set()
+    page_num = 1
+    while True:
+        records = await scrape_mre_list_page(page)
+        new_count = 0
+        for rec in records:
+            key = rec.get("roverId") or rec.get("mre")
+            if key and key in seen:
+                continue
+            if key:
+                seen.add(key)
+            all_reports.append(rec)
+            new_count += 1
+        print(f"[scrape_rover] MRE page {page_num}: {len(records)} rows ({new_count} new, total {len(all_reports)})", file=sys.stderr)
+        if page_num >= max_pages:
+            break
+        moved = await go_to_next_page(page, page_num)
+        if not moved:
+            break
+        page_num += 1
+        await page.wait_for_timeout(300)
 
-function findById(id){
-  return DATA.find(d => encodeURIComponent(idKeyOf(d)) === id);
-}
+    # SEVタイプ以外（トレーラー等）は詳細取得をスキップして負荷を減らす。
+    # タイプが判別できなかったものは念のため取得する。
+    targets = [
+        r for r in all_reports
+        if r.get("roverId") and (
+            "specialist" in (r.get("type") or "").lower() or not r.get("type")
+        )
+    ]
+    print(f"[scrape_rover] fetching {len(targets)} MRE detail pages (of {len(all_reports)} reports)", file=sys.stderr)
 
-function findSimilar(item){
-  const others = DATA.filter(d => idKeyOf(d) !== idKeyOf(item));
-  const scored = others.map(d => {
-    let score = 0;
-    if(d.category === item.category) score += 2;
-    if(d.make === item.make) score += 1;
-    const engineOverlap = (d.engines || []).some(e1 => (item.engines || []).some(e2 => e1.code === e2.code));
-    if(engineOverlap) score += 1;
-    return {item:d, score};
-  }).filter(s => s.score > 0)
-    .sort((a,b) => b.score - a.score);
-  let picked = scored.slice(0, 4).map(s => s.item);
-  if(picked.length === 0){
-    picked = others.slice(0, 3);
-  }
-  return picked;
-}
+    for i, rep in enumerate(targets):
+        url = MRE_DETAIL_URL + rep["roverId"]
+        try:
+            resp = await context.request.get(url, timeout=20000)
+            if resp.ok:
+                html = await resp.text()
+                detail = parse_mre_detail_html(html)
+                rep.update(detail)
+            else:
+                print(f"[scrape_rover] MRE detail HTTP {resp.status}: {rep.get('mre')}", file=sys.stderr)
+        except Exception as e:
+            print(f"[scrape_rover] MRE detail error for {rep.get('mre')}: {e}", file=sys.stderr)
+        if (i + 1) % 50 == 0:
+            print(f"[scrape_rover] MRE details {i+1}/{len(targets)}", file=sys.stderr)
+        await page.wait_for_timeout(detail_delay_ms)  # サイトへの負荷を抑える
 
-function similarItemHtml(item){
-  const status = getStatus(item.expiry);
-  const def = STATUS_DEFS[status.key];
-  return `<button class="similar-item" type="button" data-id="${itemId(item)}">
-      <div class="si-title">${escapeHtml(item.make)} ${escapeHtml(item.model)}</div>
-      <div class="si-meta">
-        <span>${escapeHtml(item.code || "—")} ・ <span class="cat-tag">${escapeHtml(item.category || "未分類")}</span></span>
-        <span style="color:${def.color};font-weight:600;">${def.label}</span>
-      </div>
-    </button>`;
-}
+    with_limit = sum(1 for r in targets if r.get("odometerLimitKm"))
+    with_refs = sum(1 for r in targets if r.get("sevRefs"))
+    print(f"[scrape_rover] MRE details done: odometer limit found in {with_limit}, SEV refs in {with_refs}", file=sys.stderr)
+    return all_reports
 
-// ------- 州別マーケット価格 -------
-// このサイトは carsales.com.au 等の商用サイトを自動スクレイピングしていません。
-// data/market-data.json が存在し、該当車両のエントリがある場合のみ実データを表示します。
-// ファイルが無い／該当が無い場合は「相場データなし」を表示します（詳しくはREADME参照）。
-const WEEK_LABELS = ["3週間前", "2週間前", "1週間前", "現在"];
 
-function getMarketDataFor(item){
-  if(!MARKET_DATA || !MARKET_DATA.byRoverId) return null;
-  return MARKET_DATA.byRoverId[item.roverId] || null;
-}
+def attach_model_reports(vehicles, reports):
+    """SEV番号でモデルレポートを車両に結合し、走行距離制限の表示文字列も設定する。"""
+    by_sev = {}
+    for rep in reports:
+        for ref in rep.get("sevRefs") or []:
+            by_sev.setdefault(ref, []).append(rep)
 
-function formatAud(n){
-  return "AU$" + n.toLocaleString("en-AU");
-}
+    attached = 0
+    for v in vehicles:
+        sev = v.get("sev")
+        if not sev:
+            continue
+        matched = by_sev.get(sev)
+        if not matched:
+            continue
+        attached += 1
+        v["modelReports"] = [
+            {
+                "mre": r.get("mre"),
+                "roverId": r.get("roverId"),
+                "status": r.get("status"),
+                "odometerLimitKm": r.get("odometerLimitKm"),
+                "odometerText": r.get("odometerText"),
+            }
+            for r in matched
+        ]
+        limits = [r.get("odometerLimitKm") for r in matched if r.get("odometerLimitKm")]
+        if limits:
+            v["mileageLimit"] = f"{min(limits):,}km未満（モデルレポート条件）"
+    print(f"[scrape_rover] joined model reports to {attached} vehicles", file=sys.stderr)
 
-function sparklineSvg(prices){
-  const w = 100, h = 30, pad = 4;
-  const min = Math.min(...prices), max = Math.max(...prices);
-  const range = (max - min) || 1;
-  const pts = prices.map((p, i) => {
-    const x = pad + (i / (prices.length - 1)) * (w - pad * 2);
-    const y = h - pad - ((p - min) / range) * (h - pad * 2);
-    return {x, y, p};
-  });
-  const pathD = pts.map((pt, i) => (i === 0 ? "M" : "L") + pt.x.toFixed(1) + "," + pt.y.toFixed(1)).join(" ");
-  const dots = pts.map((pt, i) => {
-    const isLast = i === pts.length - 1;
-    return `<circle class="spark-pt" tabindex="0" cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="${isLast ? 3.5 : 2.5}"
-      fill="${isLast ? "var(--accent)" : "var(--text-muted)"}" stroke="var(--surface-alt)" stroke-width="2">
-      <title>${WEEK_LABELS[i]}: ${formatAud(pt.p)}</title>
-    </circle>`;
-  }).join("");
-  return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="34" role="img" aria-label="過去3週間の価格推移スパークライン">
-      <path d="${pathD}" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity="0.55"/>
-      ${dots}
-    </svg>`;
-}
 
-function deltaText(deltaPct){
-  if(Math.abs(deltaPct) < 0.5) return "→ 横ばい";
-  const arrow = deltaPct > 0 ? "▲" : "▼";
-  return `${arrow} ${Math.abs(deltaPct).toFixed(1)}%（3週間前比）`;
-}
+async def run(out_path, limit, headful, max_pages, skip_mre=False):
+    print("[scrape_rover] version 4 (SEV list + model reports join)", file=sys.stderr)
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=not headful)
+        context = await browser.new_context()
+        page = await context.new_page()
 
-function marketSectionHtml(item){
-  const data = getMarketDataFor(item);
+        print(f"[scrape_rover] opening {LIST_URL}", file=sys.stderr)
+        await page.goto(LIST_URL, wait_until="networkidle", timeout=45000)
+        await find_results_table(page)
 
-  if(!data){
-    return `
-      <div class="market-section">
-        <div class="market-head">
-          <h3>州別マーケット価格</h3>
-        </div>
-        <div class="market-note">この車両の相場データはまだありません。data/market-data.json に該当エントリが無いか、このサイトでは相場機能を有効にしていません（README参照）。</div>
-      </div>
-    `;
-  }
+        all_records = []
+        seen_ids = set()
+        page_num = 1
+        while True:
+            records = await scrape_list_page(page, log_sample=(page_num == 1))
+            new_count = 0
+            for rec in records:
+                key = rec.get("roverId") or rec.get("sev")
+                if key and key in seen_ids:
+                    continue
+                if key:
+                    seen_ids.add(key)
+                all_records.append(rec)
+                new_count += 1
+            print(f"[scrape_rover] page {page_num}: {len(records)} rows ({new_count} new, total {len(all_records)})", file=sys.stderr)
 
-  const aggHtml = data.agg ? `
-    <div class="market-agg">
-      <span class="agg-value">${formatAud(data.agg.current)}</span>
-      <span class="agg-delta">${deltaText(data.agg.deltaPct)}</span>
-      <span class="agg-sub">全国推定（${data.agg.stateCount}州・計${data.agg.totalCount}件の出品より算出）</span>
-    </div>
-  ` : `<div class="market-agg"><span class="agg-sub">この車種は出品が見つかりませんでした。</span></div>`;
+            if limit and len(all_records) >= limit:
+                all_records = all_records[:limit]
+                break
+            if page_num >= max_pages:
+                print(f"[scrape_rover] reached max_pages={max_pages}, stopping", file=sys.stderr)
+                break
+            moved = await go_to_next_page(page, page_num)
+            if not moved:
+                break
+            page_num += 1
+            await page.wait_for_timeout(400)  # サイトへの負荷を抑える小休止
 
-  const tiles = data.states.map(s => {
-    if(!s.prices){
-      return `<div class="state-tile">
-          <div class="st-label">${s.code}</div>
-          <div class="st-empty">出品なし</div>
-        </div>`;
+        # ---- モデルレポートの取得と結合 ----
+        if not skip_mre:
+            try:
+                reports = await scrape_model_reports(context, page, max_pages)
+                attach_model_reports(all_records, reports)
+            except Exception as e:
+                print(f"[scrape_rover] model report stage failed (continuing without): {e}", file=sys.stderr)
+
+        await browser.close()
+
+    sev_count = sum(1 for r in all_records if r.get("sev"))
+    expiry_count = sum(1 for r in all_records if r.get("expiry"))
+    mre_count = sum(1 for r in all_records if r.get("modelReports"))
+    print(
+        f"[scrape_rover] done: {len(all_records)} vehicles "
+        f"(with SEV number: {sev_count}, with expiry: {expiry_count}, with model reports: {mre_count})",
+        file=sys.stderr,
+    )
+
+    output = {
+        "updatedAt": now_iso(),
+        "source": LIST_URL,
+        "count": len(all_records),
+        "vehicles": all_records,
     }
-    const delta = ((s.prices[3] - s.prices[0]) / s.prices[0]) * 100;
-    return `<div class="state-tile">
-        <div class="st-label">${s.code}</div>
-        <div class="st-value">${formatAud(s.prices[3])}</div>
-        <div class="st-delta">${deltaText(delta)}</div>
-        ${sparklineSvg(s.prices)}
-        <div class="st-count">出品${s.count}件</div>
-      </div>`;
-  }).join("");
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(output, f, ensure_ascii=False, indent=2)
+    print(f"[scrape_rover] wrote {out_path}", file=sys.stderr)
 
-  const tableRows = data.states.map(s => {
-    if(!s.prices) return `<tr><td>${s.code}（${s.name}）</td><td colspan="5">出品なし</td></tr>`;
-    return `<tr>
-        <td>${s.code}（${s.name}）</td>
-        ${s.prices.map(p => `<td>${formatAud(p)}</td>`).join("")}
-        <td>${s.count}件</td>
-      </tr>`;
-  }).join("");
 
-  return `
-    <div class="market-section">
-      <div class="market-head">
-        <h3>州別マーケット価格（直近3週間）</h3>
-        <button class="market-toggle-btn" type="button" data-market-table-toggle="1">表で見る</button>
-      </div>
-      <div class="market-note">データ取得元・更新日は data/market-data.json の設定に依存します。参考情報としてご利用ください。</div>
-      ${aggHtml}
-      <div class="state-grid">${tiles}</div>
-      <div class="market-table-wrap" hidden data-market-table="1">
-        <table class="market-table">
-          <thead><tr><th>州</th><th>${WEEK_LABELS[0]}</th><th>${WEEK_LABELS[1]}</th><th>${WEEK_LABELS[2]}</th><th>${WEEK_LABELS[3]}</th><th>出品数</th></tr></thead>
-          <tbody>${tableRows}</tbody>
-        </table>
-      </div>
-    </div>
-  `;
-}
+def main():
+    parser = argparse.ArgumentParser(description="Scrape ROVER SEV Approvals list + model reports (v4)")
+    parser.add_argument("--out", default="../data/sev-data.json", help="output JSON path")
+    parser.add_argument("--limit", type=int, default=0, help="max vehicles to scrape (0 = no limit)")
+    parser.add_argument("--headful", action="store_true", help="run with a visible browser (debugging)")
+    parser.add_argument("--max-pages", type=int, default=200, help="safety cap on list pagination")
+    parser.add_argument("--skip-mre", action="store_true", help="skip model report scraping/join")
+    args = parser.parse_args()
 
-function modelReportsFieldHtml(item){
-  const reports = item.modelReports || [];
-  if(reports.length === 0){
-    return `<div class="modal-field span-2">
-        <div class="f-label">モデルレポート（RAWS工場の適合承認）</div>
-        <div class="muted-small">この車両を扱うモデルレポートはまだ見つかっていません。走行距離制限などの輸入条件はモデルレポート単位で定められるため、条件の詳細は各工場のレポート承認後に確定します。</div>
-      </div>`;
-  }
-  const rows = reports.map(r => {
-    const link = r.roverId
-      ? `<a href="https://www.rover.infrastructure.gov.au/PublishedApprovals/ModelReportDetails/?id=${encodeURIComponent(r.roverId)}" target="_blank" rel="noopener">${escapeHtml(r.mre || "モデルレポート")} ↗</a>`
-      : escapeHtml(r.mre || "モデルレポート");
-    const limit = r.odometerLimitKm
-      ? `走行距離 ${Number(r.odometerLimitKm).toLocaleString()}km未満`
-      : "走行距離条件の記載なし";
-    const status = r.status ? `・${escapeHtml(r.status)}` : "";
-    return `<div style="padding:4px 0;">${link} <span class="muted-small">（${limit}${status}）</span></div>`;
-  }).join("");
-  return `<div class="modal-field span-2">
-      <div class="f-label">モデルレポート（RAWS工場の適合承認・${reports.length}件）</div>
-      ${rows}
-    </div>`;
-}
+    asyncio.run(run(args.out, args.limit, args.headful, args.max_pages, skip_mre=args.skip_mre))
 
-function renderDetailHtml(item){
-  const status = getStatus(item.expiry);
-  const similar = findSimilar(item);
-  return `
-    <div class="modal-header">
-      <h2 id="modalTitle">${escapeHtml(item.make)} ${escapeHtml(item.model)}</h2>
-      <div class="modal-sub">型式コード ${escapeHtml(item.code || "—")} ・ <span class="cat-tag">${escapeHtml(item.category || "未分類")}</span></div>
-    </div>
 
-    <div class="modal-grid">
-      <div class="modal-field">
-        <div class="f-label">年式</div>
-        <div><span class="year-badge">${formatYear(item.year)}</span></div>
-      </div>
-      <div class="modal-field">
-        <div class="f-label">カテゴリ</div>
-        <div><span class="cat-tag">${escapeHtml(item.category || "未分類")}</span></div>
-      </div>
-      <div class="modal-field">
-        <div class="f-label">SEV番号</div>
-        ${sevCellHtml(item)}
-      </div>
-      <div class="modal-field">
-        <div class="f-label">有効期限</div>
-        ${statusBadgeHtml(item)}
-      </div>
-      <div class="modal-field span-2">
-        <div class="f-label">走行距離制限</div>
-        <div>${escapeHtml(item.mileageLimit || "モデルレポートに記載なし")}</div>
-      </div>
-      ${modelReportsFieldHtml(item)}
-      <div class="modal-field span-2">
-        <div class="f-label">適合エンジン（✓=OK ／ ✕=対象外）</div>
-        ${engineTagsHtml(item.engines, "")}
-      </div>
-    </div>
-
-    <div class="modal-actions">
-      <a href="${item.roverId ? ("https://www.rover.infrastructure.gov.au/PublishedApprovals/SEVDetails/?id=" + encodeURIComponent(item.roverId)) : "https://www.rover.infrastructure.gov.au/PublishedApprovals/SEVApprovals/"}" target="_blank" rel="noopener">ROVER公式で${item.roverId ? "該当ページを確認" : "検索する"} ↗</a>
-      <button type="button" data-close="1">閉じる</button>
-    </div>
-
-    ${marketSectionHtml(item)}
-
-    <div class="similar-section">
-      <h3>類似車両</h3>
-      <div class="similar-grid">
-        ${similar.map(similarItemHtml).join("")}
-      </div>
-    </div>
-  `;
-}
-
-const modalOverlay = document.getElementById("modalOverlay");
-const modalContent = document.getElementById("modalContent");
-const modalClose = document.getElementById("modalClose");
-
-function showDetailUI(item){
-  modalContent.innerHTML = renderDetailHtml(item);
-  modalOverlay.hidden = false;
-  modalOverlay.scrollTop = 0;
-  document.body.style.overflow = "hidden";
-
-  modalContent.querySelectorAll(".copy-btn").forEach(btn => {
-    btn.addEventListener("click", (e) => copySev(btn.dataset.copy, btn, e));
-  });
-  modalContent.querySelectorAll(".similar-item").forEach(btn => {
-    btn.addEventListener("click", () => { location.hash = "sev-" + btn.dataset.id; });
-  });
-  const closeInline = modalContent.querySelector("[data-close]");
-  if(closeInline) closeInline.addEventListener("click", closeDetail);
-
-  const marketToggle = modalContent.querySelector("[data-market-table-toggle]");
-  const marketTable = modalContent.querySelector("[data-market-table]");
-  if(marketToggle && marketTable){
-    marketToggle.addEventListener("click", () => {
-      const nowHidden = marketTable.hidden;
-      marketTable.hidden = !nowHidden;
-      marketToggle.textContent = nowHidden ? "グラフに戻る" : "表で見る";
-    });
-  }
-}
-
-function closeDetailUI(){
-  modalOverlay.hidden = true;
-  document.body.style.overflow = "";
-}
-
-function openDetailFor(item){
-  location.hash = "sev-" + itemId(item);
-}
-
-function closeDetail(){
-  if(location.hash){
-    history.pushState("", document.title, window.location.pathname + window.location.search);
-  }
-  closeDetailUI();
-}
-
-function handleHashChange(){
-  const h = decodeURIComponent(location.hash.replace(/^#/, ""));
-  if(h.startsWith("sev-")){
-    const id = h.slice(4);
-    const item = findById(id);
-    if(item){ showDetailUI(item); return; }
-  }
-  closeDetailUI();
-}
-
-window.addEventListener("hashchange", handleHashChange);
-modalClose.addEventListener("click", closeDetail);
-modalOverlay.addEventListener("click", (e) => { if(e.target === modalOverlay) closeDetail(); });
-document.addEventListener("keydown", (e) => { if(e.key === "Escape" && !modalOverlay.hidden) closeDetail(); });
-
-function formatYear(y){
-  if(!y) return "年式不明";
-  if(y.includes("–")){
-    const [s, e] = y.split("–");
-    return `${s}年 – ${e}年`;
-  }
-  return `${y}年`;
-}
-
-function engineTagsHtml(engines, query){
-  if(!engines || engines.length === 0){
-    return `<span class="muted-small">情報なし</span>`;
-  }
-  return `<div class="engine-tags">` + engines.map(e =>
-    `<span class="eng ${e.ok ? "ok" : "ng"}">${e.ok ? "✓ " : "✕ "}${highlight(e.code, query)}</span>`
-  ).join("") + `</div>`;
-}
-
-function statusBadgeHtml(item){
-  const status = getStatus(item.expiry);
-  const def = STATUS_DEFS[status.key];
-  return `<div class="status-badge ${status.key}">
-      <span class="s-label"><span class="dot"></span>${def.label}</span>
-      <span>${statusDateText(item, status)}</span>
-    </div>`;
-}
-
-function runSearch(){
-  const query = searchInput.value.trim();
-  clearBtn.style.display = query ? "block" : "none";
-
-  let results;
-  if(query){
-    results = fuse.search(query).map(r => r.item);
-  }else{
-    results = DATA;
-  }
-  if(activeCategory !== "すべて"){
-    results = results.filter(d => d.category === activeCategory);
-  }
-  if(activeStatus !== "すべて"){
-    results = results.filter(d => getStatus(d.expiry).key === activeStatus);
-  }
-
-  // ページネーション
-  const total = results.length;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  if(currentPage > totalPages) currentPage = totalPages;
-  if(currentPage < 1) currentPage = 1;
-  const startIdx = (currentPage - 1) * PAGE_SIZE;
-  const pageResults = results.slice(startIdx, startIdx + PAGE_SIZE);
-
-  if(total === 0){
-    resultCount.textContent = "0件" + (query ? `（検索語: 「${escapeHtml(query)}」）` : "");
-  }else{
-    resultCount.textContent = `全${total}件中 ${startIdx + 1}〜${startIdx + pageResults.length}件を表示` +
-      (query ? `（検索語: 「${escapeHtml(query)}」）` : "");
-  }
-
-  tableBody.innerHTML = "";
-  cardsView.innerHTML = "";
-  renderPagination(totalPages);
-
-  if(total === 0){
-    emptyState.style.display = "block";
-    document.querySelector(".table-scroll").style.visibility = "hidden";
-    return;
-  }
-  emptyState.style.display = "none";
-  document.querySelector(".table-scroll").style.visibility = "visible";
-
-  pageResults.forEach(item => {
-    const label = `${item.make} ${item.model} の詳細を見る`;
-
-    // table row
-    const tr = document.createElement("tr");
-    tr.tabIndex = 0;
-    tr.setAttribute("role", "button");
-    tr.setAttribute("aria-label", label);
-    tr.innerHTML = `
-      <td><strong>${highlight(item.make, query)}</strong><br>${highlight(item.model, query)}<br><button class="detail-link" type="button">詳細を見る ›</button></td>
-      <td>${highlight(item.code, query)}</td>
-      <td><span class="year-badge">${formatYear(item.year)}</span></td>
-      <td><span class="cat-tag">${escapeHtml(item.category || "未分類")}</span></td>
-      <td>${engineTagsHtml(item.engines, query)}</td>
-      <td>${escapeHtml(item.mileageLimit || "記載なし")}</td>
-      <td>${sevCellHtml(item, query)}</td>
-      <td>${statusBadgeHtml(item)}</td>
-    `;
-    const trCopyBtn = tr.querySelector(".copy-btn");
-    if(trCopyBtn) trCopyBtn.addEventListener("click", (e) => copySev(item.sev, e.target, e));
-    tr.addEventListener("click", () => openDetailFor(item));
-    tr.addEventListener("keydown", (e) => { if(e.key === "Enter" || e.key === " "){ e.preventDefault(); openDetailFor(item); } });
-    tableBody.appendChild(tr);
-
-    // card
-    const card = document.createElement("div");
-    card.className = "card";
-    card.tabIndex = 0;
-    card.setAttribute("role", "button");
-    card.setAttribute("aria-label", label);
-    card.innerHTML = `
-      <div class="card-top">
-        <div class="card-title">${highlight(item.make, query)} ${highlight(item.model, query)}</div>
-        <span class="cat-tag">${escapeHtml(item.category || "未分類")}</span>
-      </div>
-      <div class="card-row"><span class="label">型式コード</span><span class="val">${highlight(item.code, query)}</span></div>
-      <div class="card-row"><span class="label">年式</span><span class="val"><span class="year-badge">${formatYear(item.year)}</span></span></div>
-      <div class="card-row"><span class="label">適合エンジン</span><span class="val">${engineTagsHtml(item.engines, query)}</span></div>
-      <div class="card-row"><span class="label">走行距離制限</span><span class="val">${escapeHtml(item.mileageLimit || "記載なし")}</span></div>
-      <div class="card-row"><span class="label">SEV番号</span>
-        <span class="val">${sevCellHtml(item, query)}</span>
-      </div>
-      <div class="card-row"><span class="label">有効期限</span><span class="val">${statusBadgeHtml(item)}</span></div>
-      <button class="detail-link" type="button">詳細を見る ›</button>
-    `;
-    const cardCopyBtn = card.querySelector(".copy-btn");
-    if(cardCopyBtn) cardCopyBtn.addEventListener("click", (e) => copySev(item.sev, e.target, e));
-    card.addEventListener("click", () => openDetailFor(item));
-    card.addEventListener("keydown", (e) => { if(e.key === "Enter" || e.key === " "){ e.preventDefault(); openDetailFor(item); } });
-    cardsView.appendChild(card);
-  });
-}
-
-const paginationEl = document.getElementById("pagination");
-
-function goToPage(p){
-  currentPage = p;
-  runSearch();
-  // ページ切り替え後、一覧の先頭が見えるようにスクロール
-  const anchor = document.querySelector(".meta-row");
-  if(anchor) anchor.scrollIntoView({behavior:"smooth", block:"start"});
-}
-
-function renderPagination(totalPages){
-  paginationEl.innerHTML = "";
-  if(totalPages <= 1) return;
-
-  const addBtn = (label, page, opts = {}) => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.textContent = label;
-    if(opts.current) btn.classList.add("current");
-    if(opts.disabled) btn.disabled = true;
-    if(!opts.current && !opts.disabled){
-      btn.addEventListener("click", () => goToPage(page));
-    }
-    if(opts.ariaLabel) btn.setAttribute("aria-label", opts.ariaLabel);
-    paginationEl.appendChild(btn);
-  };
-  const addEllipsis = () => {
-    const span = document.createElement("span");
-    span.className = "ellipsis";
-    span.textContent = "…";
-    paginationEl.appendChild(span);
-  };
-
-  addBtn("‹", currentPage - 1, {disabled: currentPage === 1, ariaLabel: "前のページ"});
-
-  // 表示するページ番号: 1, 最後, 現在±2（間は…で省略）
-  const pages = new Set([1, totalPages]);
-  for(let p = currentPage - 2; p <= currentPage + 2; p++){
-    if(p >= 1 && p <= totalPages) pages.add(p);
-  }
-  const sorted = [...pages].sort((a, b) => a - b);
-  let prev = 0;
-  for(const p of sorted){
-    if(p - prev > 1) addEllipsis();
-    addBtn(String(p), p, {current: p === currentPage});
-    prev = p;
-  }
-
-  addBtn("›", currentPage + 1, {disabled: currentPage === totalPages, ariaLabel: "次のページ"});
-}
-
-searchInput.addEventListener("input", () => {
-  currentPage = 1;
-  runSearch();
-});
-clearBtn.addEventListener("click", () => {
-  searchInput.value = "";
-  currentPage = 1;
-  runSearch();
-  searchInput.focus();
-});
-
-document.getElementById("themeToggle").addEventListener("click", () => {
-  const html = document.documentElement;
-  const isDark = html.getAttribute("data-theme") === "dark";
-  html.setAttribute("data-theme", isDark ? "light" : "dark");
-  document.getElementById("themeToggle").textContent = isDark ? "ダークモード" : "ライトモード";
-});
-
-// ------- データ読み込み -------
-const updatedAtText = document.getElementById("updatedAtText");
-const loadError = document.getElementById("loadError");
-const loadErrorDetail = document.getElementById("loadErrorDetail");
-
-function formatUpdatedAt(iso){
-  if(!iso) return "不明";
-  const d = new Date(iso);
-  if(isNaN(d.getTime())) return iso;
-  return d.toLocaleString("ja-JP", { timeZone: "Australia/Brisbane", dateStyle: "medium", timeStyle: "short" }) + "（豪州時間）";
-}
-
-async function loadData(){
-  try{
-    const res = await fetch("data/sev-data.json", { cache: "no-store" });
-    if(!res.ok) throw new Error("HTTP " + res.status);
-    const json = await res.json();
-    DATA = Array.isArray(json) ? json : (json.vehicles || []);
-
-    fuse = new Fuse(DATA, {
-      keys: ["make", "model", "code", "sev", "engines.code"],
-      threshold: 0.35,
-      ignoreLocation: true,
-    });
-
-    updatedAtText.textContent = `データ最終更新: ${formatUpdatedAt(json.updatedAt)} / 期限判定は表示時点の日付で自動計算`;
-
-    renderChips();
-    runSearch();
-    handleHashChange();
-  }catch(err){
-    loadError.hidden = false;
-    loadErrorDetail.textContent = `data/sev-data.json の取得に失敗しました（${err.message}）。初回のGitHub Actions実行がまだ完了していないか、パスが正しくない可能性があります。`;
-    resultCount.textContent = "読み込みエラー";
-    updatedAtText.textContent = "データ最終更新: 取得失敗";
-  }
-}
-
-async function loadMarketData(){
-  try{
-    const res = await fetch("data/market-data.json", { cache: "no-store" });
-    if(!res.ok) return; // ファイルが無いのは正常（相場機能を使っていない場合）
-    MARKET_DATA = await res.json();
-  }catch(err){
-    // 相場データは無くても致命的ではないため、静かに無視する
-    MARKET_DATA = null;
-  }
-}
-
-loadMarketData().finally(loadData);
-</script>
-</body>
-</html>
+if __name__ == "__main__":
+    main()
