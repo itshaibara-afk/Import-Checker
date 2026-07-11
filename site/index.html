@@ -540,6 +540,7 @@ function highlight(text, query){
 }
 
 function escapeHtml(str){
+  if(str === undefined || str === null) return "";
   return String(str).replace(/[&<>"']/g, m => ({
     "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
   }[m]));
@@ -555,16 +556,32 @@ function copySev(sev, btn, evt){
   });
 }
 
+function sevCellHtml(item, query){
+  if(!item.sev){
+    return `<span class="muted-small">SEV番号が取得できていません</span>`;
+  }
+  return `<div class="sev-cell">
+      <span>${highlight(item.sev, query || "")}</span>
+      <button class="copy-btn" type="button" data-copy="${escapeHtml(item.sev)}">コピー</button>
+    </div>`;
+}
+
+function idKeyOf(item){
+  // SEV番号が取れていない行でも一意に特定できるよう、無ければroverId、
+  // それも無ければ内部インデックスにフォールバックする。
+  return item.sev || item.roverId || ("row-" + (item._i != null ? item._i : ""));
+}
+
 function itemId(item){
-  return encodeURIComponent(item.sev);
+  return encodeURIComponent(idKeyOf(item));
 }
 
 function findById(id){
-  return DATA.find(d => encodeURIComponent(d.sev) === id);
+  return DATA.find(d => encodeURIComponent(idKeyOf(d)) === id);
 }
 
 function findSimilar(item){
-  const others = DATA.filter(d => d.sev !== item.sev);
+  const others = DATA.filter(d => idKeyOf(d) !== idKeyOf(item));
   const scored = others.map(d => {
     let score = 0;
     if(d.category === item.category) score += 2;
@@ -724,7 +741,7 @@ function renderDetailHtml(item){
       </div>
       <div class="modal-field">
         <div class="f-label">SEV番号</div>
-        <div class="sev-cell">${escapeHtml(item.sev)} <button class="copy-btn" type="button" data-copy="${escapeHtml(item.sev)}">コピー</button></div>
+        ${sevCellHtml(item)}
       </div>
       <div class="modal-field">
         <div class="f-label">有効期限</div>
@@ -889,15 +906,11 @@ function runSearch(){
       <td><span class="cat-tag">${escapeHtml(item.category || "未分類")}</span></td>
       <td>${engineTagsHtml(item.engines, query)}</td>
       <td>${escapeHtml(item.mileageLimit || "情報なし")}</td>
-      <td>
-        <div class="sev-cell">
-          <span>${highlight(item.sev, query)}</span>
-          <button class="copy-btn" type="button">コピー</button>
-        </div>
-      </td>
+      <td>${sevCellHtml(item, query)}</td>
       <td>${statusBadgeHtml(item)}</td>
     `;
-    tr.querySelector(".copy-btn").addEventListener("click", (e) => copySev(item.sev, e.target, e));
+    const trCopyBtn = tr.querySelector(".copy-btn");
+    if(trCopyBtn) trCopyBtn.addEventListener("click", (e) => copySev(item.sev, e.target, e));
     tr.addEventListener("click", () => openDetailFor(item));
     tr.addEventListener("keydown", (e) => { if(e.key === "Enter" || e.key === " "){ e.preventDefault(); openDetailFor(item); } });
     tableBody.appendChild(tr);
@@ -918,12 +931,13 @@ function runSearch(){
       <div class="card-row"><span class="label">適合エンジン</span><span class="val">${engineTagsHtml(item.engines, query)}</span></div>
       <div class="card-row"><span class="label">走行距離制限</span><span class="val">${escapeHtml(item.mileageLimit || "情報なし")}</span></div>
       <div class="card-row"><span class="label">SEV番号</span>
-        <span class="val sev-cell">${highlight(item.sev, query)} <button class="copy-btn" type="button">コピー</button></span>
+        <span class="val">${sevCellHtml(item, query)}</span>
       </div>
       <div class="card-row"><span class="label">有効期限</span><span class="val">${statusBadgeHtml(item)}</span></div>
       <button class="detail-link" type="button">詳細を見る ›</button>
     `;
-    card.querySelector(".copy-btn").addEventListener("click", (e) => copySev(item.sev, e.target, e));
+    const cardCopyBtn = card.querySelector(".copy-btn");
+    if(cardCopyBtn) cardCopyBtn.addEventListener("click", (e) => copySev(item.sev, e.target, e));
     card.addEventListener("click", () => openDetailFor(item));
     card.addEventListener("keydown", (e) => { if(e.key === "Enter" || e.key === " "){ e.preventDefault(); openDetailFor(item); } });
     cardsView.appendChild(card);
