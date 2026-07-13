@@ -511,8 +511,9 @@ let fuse = null;
 let currentPage = 1;
 const PAGE_SIZE = 10;
 
-// ------- グルーピング: 同じメーカー＋モデル＋型式コードのSEVエントリを1つにまとめる -------
-// ・型式コードをキーに含めることで、世代違い（例: 30系と40系のアルファード）は別グループになる
+// ------- グルーピング: 同じメーカー＋モデル＋年式のSEVエントリを1つにまとめる -------
+// ・年式（製造期間）が完全に一致する車は同じグループ、違えば別グループ
+//   → 世代違い（例: 2015–2023の30系と2023–の40系）は自動的に分かれる
 // ・ウェルキャブ（福祉車両）仕様は、SEV詳細のCriterion/Variant（Mobility等）または
 //   名前のキーワードから判定し、通常仕様とは必ず別グループにする
 const RE_WELCAB = /welcab|welfare|chaircab|wheelchair|mobility|disabled|disability/i;
@@ -523,17 +524,13 @@ function isWelcabVehicle(v){
   );
 }
 
-function normCode(v){
-  return (v.code || "").replace(/\s+/g, " ").trim().toUpperCase();
-}
-
 function buildGroups(vehicles){
   const map = new Map();
   vehicles.forEach(v => {
     const welcab = isWelcabVehicle(v);
     const key = ((v.make || "").trim().toUpperCase()) + "|" +
                 ((v.model || "").trim().toUpperCase()) + "|" +
-                normCode(v) + "|" +
+                ((v.year || "").trim()) + "|" +
                 (welcab ? "WELCAB" : "STD");
     if(!map.has(key)){
       map.set(key, {make: v.make, model: v.model, isWelcab: welcab, entries: [], modelReports: [], _mreSeen: new Set()});
@@ -553,6 +550,13 @@ function buildGroups(vehicles){
     const uniq = arr => [...new Set(arr.filter(Boolean))];
     g.categories = uniq(g.entries.map(e => e.category || "未分類"));
     g.codes = uniq(g.entries.map(e => e.code));
+    // 一覧表示用の短い型式表記（代表1つ＋残り件数）。完全なリストは詳細パネルで表示
+    g.codeTokens = uniq(g.entries.flatMap(e =>
+      String(e.codeFull || e.code || "").split(",").map(s => s.trim())
+    ));
+    g.codeShort = g.codeTokens.length
+      ? g.codeTokens[0] + (g.codeTokens.length > 1 ? ` 他${g.codeTokens.length - 1}` : "")
+      : "—";
     g.years = uniq(g.entries.map(e => e.year));
     g.sevs = uniq(g.entries.map(e => e.sev));
     // グループの代表期限 = 最も先の有効期限（1つでも有効なら輸入経路があるため）
@@ -563,7 +567,7 @@ function buildGroups(vehicles){
     g.mileageLimit = limits.length ? `${Math.min(...limits).toLocaleString()}km未満（モデルレポート条件）` : null;
     g.roverId = (g.entries.find(e => e.roverId) || {}).roverId || null;
     // 検索用の結合文字列
-    g.codesJoined = g.codes.join(" ");
+    g.codesJoined = g.codeTokens.join(" ");
     g.sevsJoined = g.sevs.join(" ");
     g.mreJoined = g.modelReports.map(r => r.mre).filter(Boolean).join(" ");
     return g;
@@ -861,7 +865,7 @@ function sevEntriesFieldHtml(group){
     const link = e.roverId
       ? ` <a href="https://www.rover.infrastructure.gov.au/PublishedApprovals/SEVDetails/?id=${encodeURIComponent(e.roverId)}" target="_blank" rel="noopener">公式 ↗</a>`
       : "";
-    const meta = [e.code, e.year ? formatYear(e.year) : null, e.category]
+    const meta = [e.codeFull || e.code, e.year ? formatYear(e.year) : null, e.category]
       .filter(Boolean).map(escapeHtml).join(" ・ ");
     const extra = [
       e.criterion ? `登録基準: ${escapeHtml(e.criterion)}` : null,
@@ -927,7 +931,7 @@ function renderDetailHtml(group){
   return `
     <div class="modal-header">
       <h2 id="modalTitle">${escapeHtml(group.make)} ${escapeHtml(group.model)}</h2>
-      <div class="modal-sub">型式コード ${escapeHtml(group.codes.join(", ") || "—")} ・ ${catTags}</div>
+      <div class="modal-sub">型式コード ${escapeHtml(group.codeTokens.join(", ") || "—")} ・ ${catTags}</div>
     </div>
 
     <div class="modal-grid">
@@ -1103,7 +1107,7 @@ function runSearch(){
     tr.setAttribute("aria-label", label);
     tr.innerHTML = `
       <td><strong>${highlight(group.make, query)}</strong><br>${highlight(group.model, query)}<br><button class="detail-link" type="button">詳細を見る ›</button></td>
-      <td>${highlight(group.codes.join(", "), query)}</td>
+      <td>${highlight(group.codeShort, query)}</td>
       <td><span class="year-badge">${escapeHtml(yearText)}</span></td>
       <td>${catTags}</td>
       <td>${mreSummary}</td>
@@ -1128,7 +1132,7 @@ function runSearch(){
         <div class="card-title">${highlight(group.make, query)} ${highlight(group.model, query)}</div>
         <span>${catTags}</span>
       </div>
-      <div class="card-row"><span class="label">型式コード</span><span class="val">${highlight(group.codes.join(", "), query)}</span></div>
+      <div class="card-row"><span class="label">型式コード</span><span class="val">${highlight(group.codeShort, query)}</span></div>
       <div class="card-row"><span class="label">年式</span><span class="val"><span class="year-badge">${escapeHtml(yearText)}</span></span></div>
       <div class="card-row"><span class="label">モデルレポート</span><span class="val">${mreSummary}</span></div>
       <div class="card-row"><span class="label">走行距離制限</span><span class="val">${escapeHtml(group.mileageLimit || "記載なし")}</span></div>
