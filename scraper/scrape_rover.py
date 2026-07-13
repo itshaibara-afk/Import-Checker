@@ -45,8 +45,10 @@ RE_MRE = re.compile(r"^MRE-\d+", re.I)
 RE_MONTH_YEAR = re.compile(r"^(\d{1,2})/(\d{4})$")          # 例: 08/2018
 RE_FULL_DATE = re.compile(r"^(\d{1,2})/(\d{1,2})/(\d{4})$")  # 例: 16/07/2026
 RE_NO_END = re.compile(r"^no\s*end\s*date$", re.I)
-# カテゴリ例: "NA - Light Goods Vehicle", "LC - Motor Cycle"
-RE_CATEGORY = re.compile(r"^[A-Z]{1,2}\d?\s*-\s*.+", re.I)
+# カテゴリ例: "NA - Light Goods Vehicle", "LC - Motor Cycle", "MD3 - Light Omnibus"
+# 豪州の車両区分コードは L/M/N/T で始まる短い符号のみ。" - " の前後スペースも必須に
+# して、"F-150 Lightning" や "S-Class" のような車名の誤検出を防ぐ（大文字のみ）。
+RE_CATEGORY = re.compile(r"^[LMNT][A-E]?\d?\s+-\s+.+")
 # モデルレポート一覧のステータス値
 RE_MRE_STATUS = re.compile(r"^(in force|revoked|suspended|expired|lapsed)$", re.I)
 # 詳細ページ本文からの抽出用
@@ -135,7 +137,10 @@ def classify_cells(cells):
         if RE_NO_END.match(t):
             no_end = True
             continue
-        if cat_idx is None and RE_CATEGORY.match(t) and len(t) > 6:
+        # カテゴリはSEV番号→メーカー→モデルの後の列にしか現れないため、
+        # 位置条件も課してモデル名（例: X-Trail）の誤検出を防ぐ。
+        if (cat_idx is None and RE_CATEGORY.match(t) and len(t) > 6
+                and (sev_idx is None or idx >= sev_idx + 3)):
             record["category"] = t
             cat_idx = idx
             continue
@@ -295,15 +300,41 @@ def classify_mre_cells(cells):
     return record
 
 
+def _extract_between(text, start_label, end_labels, max_len=2500):
+    """フラット化したテキストから start_label と最初に現れる end_label の間を抜き出す。"""
+    m = re.search(re.escape(start_label), text, re.I)
+    if not m:
+        return None
+    start = m.end()
+    end = min(start + max_len, len(text))
+    for el in end_labels:
+        m2 = re.search(re.escape(el), text[start:start + max_len], re.I)
+        if m2:
+            end = min(end, start + m2.start())
+    chunk = text[start:end].strip(" :：-–")
+    return chunk.strip() or None
+
+
 def parse_mre_detail_html(html):
-    """モデルレポート詳細ページ(静的HTML)から走行距離制限と参照SEV番号を抽出。"""
-    result = {"sevRefs": [], "odometerLimitKm": None, "odometerText": None}
+    """モデルレポート詳細ページ(静的HTML)から走行距離制限・参照SEV番号・
+    承認保有者・ノート類を抽出する。
+
+    実ページのラベル並び（確認済み）:
+      Approval Number / Make / Model / Approval holder name / Approval Status /
+      Model report type / ... / Model Report notes / Model numbers / Welcab feature /
+      Build date / ... / Compliance level notes / Model Report Scope(s) / ...
+    """
+    result = {
+        "sevRefs": [], "odometerLimitKm": None, "odometerText": None,
+        "holder": None, "reportNotes": None, "complianceNotes": None,
+    }
 
     # HTMLタグを落として素のテキストに近づける（正規表現ベースの簡易処理）
     text = re.sub(r"<script[\s\S]*?</script>", " ", html, flags=re.I)
     text = re.sub(r"<style[\s\S]*?</style>", " ", text, flags=re.I)
     text = re.sub(r"<[^>]+>", " ", text)
     text = re.sub(r"&nbsp;?", " ", text)
+    text = re.sub(r"&amp;", "&", text)
     text = re.sub(r"\s+", " ", text)
 
     refs = sorted(set(RE_SEV_REF.findall(text)))
@@ -315,10 +346,29 @@ def parse_mre_detail_html(html):
             result["odometerLimitKm"] = int(m.group(1).replace(",", ""))
         except ValueError:
             pass
-        # 制限文の前後を短く切り出して原文として保持
         start = max(0, m.start() - 60)
         end = min(len(text), m.end() + 40)
         result["odometerText"] = text[start:end].strip()
+
+    # 承認保有者（工場・事業者名）
+    result["holder"] = _extract_between(
+        text, "Approval holder name", ["Approval Status", "Model report type"], max_len=200
+    )
+
+    # モデルレポートのメモ（Welcab条件・対象モデル番号などが入る）
+    result["reportNotes"] = _extract_between(
+        text, "Model Report notes",
+        ["Build date", "Typical VIN", "Source market", "Compliance level notes",
+         "Pre-modification", "Model Report Scope"],
+    )
+
+    # コンプライアンスノート（ADR適合・走行距離条件・エンジン条件などが入る）
+    # 注意: "Approved on" は本文中の "approved on this Model Report" に誤マッチ
+    # するため境界ラベルに使わないこと。
+    result["complianceNotes"] = _extract_between(
+        text, "Compliance level notes",
+        ["Model Report Scope", "Current Model Report Scope"],
+    )
     return result
 
 
@@ -424,8 +474,11 @@ def attach_model_reports(vehicles, reports):
                 "mre": r.get("mre"),
                 "roverId": r.get("roverId"),
                 "status": r.get("status"),
+                "holder": r.get("holder"),
                 "odometerLimitKm": r.get("odometerLimitKm"),
                 "odometerText": r.get("odometerText"),
+                "reportNotes": r.get("reportNotes"),
+                "complianceNotes": r.get("complianceNotes"),
             }
             for r in matched
         ]
