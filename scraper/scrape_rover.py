@@ -36,6 +36,7 @@ from playwright.async_api import async_playwright, TimeoutError as PlaywrightTim
 
 BASE_URL = "https://www.rover.infrastructure.gov.au"
 LIST_URL = f"{BASE_URL}/PublishedApprovals/SEVApprovals/"
+SEV_DETAIL_URL = f"{BASE_URL}/PublishedApprovals/SEVDetails/?id="
 MRE_LIST_URL = f"{BASE_URL}/PublishedApprovals/MREApprovals/"
 MRE_DETAIL_URL = f"{BASE_URL}/PublishedApprovals/ModelReportDetails/?id="
 
@@ -272,6 +273,35 @@ async def go_to_next_page(page, current_page_num):
     return False
 
 
+async def scrape_sev_details(context, page, vehicles, detail_delay_ms=250):
+    """各SEVエントリの詳細ページからバリアント・基準・型式コード全リストを取得して結合する。"""
+    targets = [v for v in vehicles if v.get("roverId")]
+    print(f"[scrape_rover] fetching {len(targets)} SEV detail pages", file=sys.stderr)
+    got = 0
+    for i, v in enumerate(targets):
+        url = SEV_DETAIL_URL + v["roverId"]
+        try:
+            resp = await context.request.get(url, timeout=20000)
+            if resp.ok:
+                detail = parse_sev_detail_html(await resp.text())
+                if detail:
+                    got += 1
+                if detail.get("codeFull"):
+                    v["code"] = detail["codeFull"]
+                for k in ("variant", "variantDetails", "criterion"):
+                    if detail.get(k):
+                        v[k] = detail[k]
+            else:
+                print(f"[scrape_rover] SEV detail HTTP {resp.status}: {v.get('sev')}", file=sys.stderr)
+        except Exception as e:
+            print(f"[scrape_rover] SEV detail error for {v.get('sev')}: {e}", file=sys.stderr)
+        if (i + 1) % 50 == 0:
+            print(f"[scrape_rover] SEV details {i+1}/{len(targets)}", file=sys.stderr)
+        await page.wait_for_timeout(detail_delay_ms)  # サイトへの負荷を抑える
+    crit_count = sum(1 for v in targets if v.get("criterion"))
+    print(f"[scrape_rover] SEV details done: parsed {got}, with criterion {crit_count}", file=sys.stderr)
+
+
 def classify_mre_cells(cells):
     """モデルレポート一覧の行を分類する。
     フィルター項目から推定される列: 承認番号 | メーカー | モデル | タイプ | ステータス | 関連承認"""
@@ -300,19 +330,59 @@ def classify_mre_cells(cells):
     return record
 
 
-def _extract_between(text, start_label, end_labels, max_len=2500):
+def _extract_between(text, start_label, end_labels, max_len=2500, case_sensitive=False):
     """フラット化したテキストから start_label と最初に現れる end_label の間を抜き出す。"""
-    m = re.search(re.escape(start_label), text, re.I)
+    flags = 0 if case_sensitive else re.I
+    m = re.search(re.escape(start_label), text, flags)
     if not m:
         return None
     start = m.end()
     end = min(start + max_len, len(text))
     for el in end_labels:
-        m2 = re.search(re.escape(el), text[start:start + max_len], re.I)
+        m2 = re.search(re.escape(el), text[start:start + max_len], flags)
         if m2:
             end = min(end, start + m2.start())
     chunk = text[start:end].strip(" :：-–")
     return chunk.strip() or None
+
+
+def _flatten_html(html):
+    """HTMLをタグ抜きの1行テキストへ変換する（正規表現ベースの簡易処理）。"""
+    text = re.sub(r"<script[\s\S]*?</script>", " ", html, flags=re.I)
+    text = re.sub(r"<style[\s\S]*?</style>", " ", text, flags=re.I)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"&nbsp;?", " ", text)
+    text = re.sub(r"&amp;", "&", text)
+    text = re.sub(r"\s+", " ", text)
+    return text
+
+
+def parse_sev_detail_html(html):
+    """SEV詳細ページ(静的HTML)からバリアント・基準(Criterion)・型式コード全リストを抽出。
+
+    実ページのラベル並び（確認済み）:
+      SEV # / Make / Model / Vehicle category / Build date range /
+      Variant / Variant details / Criterion / Expiry / Model code
+
+    注意: モデル名に "Welfare variant"(小文字v) が含まれる車があるため、
+    ラベル検索は大文字小文字を区別して行う。
+    """
+    text = _flatten_html(html)
+    result = {}
+    result["variant"] = _extract_between(
+        text, "Variant", ["Variant details", "Criterion"], max_len=200, case_sensitive=True
+    )
+    result["variantDetails"] = _extract_between(
+        text, "Variant details", ["Criterion", "Expiry"], max_len=500, case_sensitive=True
+    )
+    result["criterion"] = _extract_between(
+        text, "Criterion", ["Expiry", "Model code"], max_len=200, case_sensitive=True
+    )
+    result["codeFull"] = _extract_between(
+        text, "Model code", ["Print", "Back to", "Disclaimer", "Copyright"],
+        max_len=400, case_sensitive=True
+    )
+    return {k: v for k, v in result.items() if v}
 
 
 def parse_mre_detail_html(html):
@@ -329,13 +399,7 @@ def parse_mre_detail_html(html):
         "holder": None, "reportNotes": None, "complianceNotes": None,
     }
 
-    # HTMLタグを落として素のテキストに近づける（正規表現ベースの簡易処理）
-    text = re.sub(r"<script[\s\S]*?</script>", " ", html, flags=re.I)
-    text = re.sub(r"<style[\s\S]*?</style>", " ", text, flags=re.I)
-    text = re.sub(r"<[^>]+>", " ", text)
-    text = re.sub(r"&nbsp;?", " ", text)
-    text = re.sub(r"&amp;", "&", text)
-    text = re.sub(r"\s+", " ", text)
+    text = _flatten_html(html)
 
     refs = sorted(set(RE_SEV_REF.findall(text)))
     result["sevRefs"] = refs
@@ -488,8 +552,8 @@ def attach_model_reports(vehicles, reports):
     print(f"[scrape_rover] joined model reports to {attached} vehicles", file=sys.stderr)
 
 
-async def run(out_path, limit, headful, max_pages, skip_mre=False):
-    print("[scrape_rover] version 4 (SEV list + model reports join)", file=sys.stderr)
+async def run(out_path, limit, headful, max_pages, skip_mre=False, skip_details=False):
+    print("[scrape_rover] version 6 (SEV list + SEV details + model reports join)", file=sys.stderr)
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=not headful)
         context = await browser.new_context()
@@ -526,6 +590,13 @@ async def run(out_path, limit, headful, max_pages, skip_mre=False):
                 break
             page_num += 1
             await page.wait_for_timeout(400)  # サイトへの負荷を抑える小休止
+
+        # ---- SEV詳細ページ（バリアント・基準・型式コード全リスト）の取得 ----
+        if not skip_details:
+            try:
+                await scrape_sev_details(context, page, all_records)
+            except Exception as e:
+                print(f"[scrape_rover] SEV detail stage failed (continuing without): {e}", file=sys.stderr)
 
         # ---- モデルレポートの取得と結合 ----
         if not skip_mre:
@@ -564,9 +635,11 @@ def main():
     parser.add_argument("--headful", action="store_true", help="run with a visible browser (debugging)")
     parser.add_argument("--max-pages", type=int, default=200, help="safety cap on list pagination")
     parser.add_argument("--skip-mre", action="store_true", help="skip model report scraping/join")
+    parser.add_argument("--skip-details", action="store_true", help="skip SEV detail page scraping")
     args = parser.parse_args()
 
-    asyncio.run(run(args.out, args.limit, args.headful, args.max_pages, skip_mre=args.skip_mre))
+    asyncio.run(run(args.out, args.limit, args.headful, args.max_pages,
+                    skip_mre=args.skip_mre, skip_details=args.skip_details))
 
 
 if __name__ == "__main__":
