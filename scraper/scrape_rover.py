@@ -286,8 +286,10 @@ async def scrape_sev_details(context, page, vehicles, detail_delay_ms=250):
                 detail = parse_sev_detail_html(await resp.text())
                 if detail:
                     got += 1
+                # 一覧の code は短い代表表記のまま残し、詳細ページの完全なリストは
+                # codeFull として別フィールドに保持する（一覧表示が長くなりすぎるのを防ぐ）
                 if detail.get("codeFull"):
-                    v["code"] = detail["codeFull"]
+                    v["codeFull"] = detail["codeFull"]
                 for k in ("variant", "variantDetails", "criterion"):
                     if detail.get(k):
                         v[k] = detail[k]
