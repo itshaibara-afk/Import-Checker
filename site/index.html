@@ -511,12 +511,20 @@ let fuse = null;
 let currentPage = 1;
 const PAGE_SIZE = 10;
 
-// ------- グルーピング: 同じメーカー＋モデルのSEVエントリを1つにまとめる -------
-// ただしウェルキャブ（福祉車両）仕様と通常仕様は別グループとして扱う。
-const RE_WELCAB = /welcab|welfare|chaircab|wheelchair|mobility/i;
+// ------- グルーピング: 同じメーカー＋モデル＋型式コードのSEVエントリを1つにまとめる -------
+// ・型式コードをキーに含めることで、世代違い（例: 30系と40系のアルファード）は別グループになる
+// ・ウェルキャブ（福祉車両）仕様は、SEV詳細のCriterion/Variant（Mobility等）または
+//   名前のキーワードから判定し、通常仕様とは必ず別グループにする
+const RE_WELCAB = /welcab|welfare|chaircab|wheelchair|mobility|disabled|disability/i;
 
 function isWelcabVehicle(v){
-  return RE_WELCAB.test([v.model, v.code].filter(Boolean).join(" "));
+  return RE_WELCAB.test(
+    [v.criterion, v.variant, v.variantDetails, v.model, v.code].filter(Boolean).join(" ")
+  );
+}
+
+function normCode(v){
+  return (v.code || "").replace(/\s+/g, " ").trim().toUpperCase();
 }
 
 function buildGroups(vehicles){
@@ -525,6 +533,7 @@ function buildGroups(vehicles){
     const welcab = isWelcabVehicle(v);
     const key = ((v.make || "").trim().toUpperCase()) + "|" +
                 ((v.model || "").trim().toUpperCase()) + "|" +
+                normCode(v) + "|" +
                 (welcab ? "WELCAB" : "STD");
     if(!map.has(key)){
       map.set(key, {make: v.make, model: v.model, isWelcab: welcab, entries: [], modelReports: [], _mreSeen: new Set()});
@@ -854,9 +863,14 @@ function sevEntriesFieldHtml(group){
       : "";
     const meta = [e.code, e.year ? formatYear(e.year) : null, e.category]
       .filter(Boolean).map(escapeHtml).join(" ・ ");
+    const extra = [
+      e.criterion ? `登録基準: ${escapeHtml(e.criterion)}` : null,
+      e.variantDetails ? `対象: ${escapeHtml(e.variantDetails)}` : (e.variant ? `対象: ${escapeHtml(e.variant)}` : null),
+    ].filter(Boolean).join(" ／ ");
+    const extraLine = extra ? `<br><span class="muted-small">${extra}</span>` : "";
     const copyBtn = e.sev ? ` <button class="copy-btn" type="button" data-copy="${escapeHtml(e.sev)}">コピー</button>` : "";
     return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border-top:1px dashed var(--border);flex-wrap:wrap;">
-        <div><strong>${sevLabel}</strong>${copyBtn}${link}<br><span class="muted-small">${meta}</span></div>
+        <div><strong>${sevLabel}</strong>${copyBtn}${link}<br><span class="muted-small">${meta}</span>${extraLine}</div>
         <div>${statusBadgeHtml(e)}</div>
       </div>`;
   }).join("");
