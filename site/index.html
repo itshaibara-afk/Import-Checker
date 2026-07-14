@@ -295,6 +295,15 @@
   }
   .modal-close:hover{color:var(--accent);border-color:var(--accent);}
   .modal-header{margin-bottom:14px;padding-right:36px;}
+  .vehicle-photo{margin:0 0 14px;}
+  .vehicle-photo img{
+    width:100%;max-height:320px;object-fit:cover;
+    border-radius:10px;border:1px solid var(--border);display:block;
+  }
+  .vehicle-photo .photo-caption{
+    font-size:0.72rem;color:var(--text-muted);margin-top:4px;
+  }
+  .vehicle-photo .photo-caption a{color:var(--text-muted);}
   .modal-header h2{margin:0 0 4px;font-size:1.25rem;}
   .modal-header .modal-sub{color:var(--text-muted);font-size:0.85rem;}
   .modal-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin:16px 0;}
@@ -416,19 +425,22 @@
 
   <header class="top">
     <div>
-      <h1>SEV検索（非公式ミラー）</h1>
-      <p class="sub">Specialist &amp; Enthusiast Vehicles Register を検索しやすくした非公式サイト</p>
+      <h1 id="siteTitle">SEV検索（非公式ミラー）</h1>
+      <p class="sub" id="siteSub">Specialist &amp; Enthusiast Vehicles Register を検索しやすくした非公式サイト</p>
     </div>
-    <button class="theme-btn" id="themeToggle">ダークモード</button>
+    <div style="display:flex;gap:8px;">
+      <button class="theme-btn" id="langToggle">EN</button>
+      <button class="theme-btn" id="themeToggle">ダークモード</button>
+    </div>
   </header>
 
   <div class="banner">
-    <strong>これは非公式のミラーサイトです</strong>
-    ROVER公式サイトのSEV登録データを毎日自動的に取り込んで表示しています。政府の公式登録簿ではないため、実際の輸入可否判断は必ず<a href="https://www.rover.infrastructure.gov.au/PublishedApprovals/SEVApprovals/" target="_blank" rel="noopener">ROVER公式サイト</a>で確認してください。データの取得時刻はページ下部に表示しています。
+    <strong id="bannerTitle">これは非公式のミラーサイトです</strong>
+    <span id="bannerBody">ROVER公式サイトのSEV登録データを毎日自動的に取り込んで表示しています。政府の公式登録簿ではないため、実際の輸入可否判断は必ず<a href="https://www.rover.infrastructure.gov.au/PublishedApprovals/SEVApprovals/" target="_blank" rel="noopener">ROVER公式サイト</a>で確認してください。データの取得時刻はページ下部に表示しています。</span>
   </div>
 
   <div class="banner" id="loadError" hidden>
-    <strong>データを読み込めませんでした</strong>
+    <strong id="loadErrorTitle">データを読み込めませんでした</strong>
     <span id="loadErrorDetail">data/sev-data.json の取得に失敗しました。初回のGitHub Actions実行がまだ完了していない可能性があります。</span>
   </div>
 
@@ -439,21 +451,21 @@
     </div>
 
     <div class="filter-group">
-      <div class="filter-label">メーカー</div>
+      <div class="filter-label" id="filterMakeLabel">メーカー</div>
       <select id="makeSelect" class="make-select">
         <option value="すべて">すべてのメーカー</option>
       </select>
     </div>
 
     <div class="filter-group">
-      <div class="filter-label">有効期限の状態</div>
+      <div class="filter-label" id="filterStatusLabel">有効期限の状態</div>
       <div class="chips" id="statusChips"></div>
     </div>
 
-    <div class="legend">
-      <span><span class="dot" style="background:var(--ok-text)"></span>有効（3ヶ月超）</span>
-      <span><span class="dot" style="background:var(--soon-text)"></span>まもなく失効（3ヶ月以内）</span>
-      <span><span class="dot" style="background:var(--exp-text)"></span>失効済み</span>
+    <div class="legend" id="legendRow">
+      <span><span class="dot" style="background:var(--ok-text)"></span><span id="legendValid">有効（3ヶ月超）</span></span>
+      <span><span class="dot" style="background:var(--soon-text)"></span><span id="legendSoon">まもなく失効（3ヶ月以内）</span></span>
+      <span><span class="dot" style="background:var(--exp-text)"></span><span id="legendExpired">失効済み</span></span>
     </div>
   </div>
 
@@ -465,7 +477,7 @@
   <div class="table-scroll">
     <table id="resultsTable">
       <thead>
-        <tr>
+        <tr id="tableHeadRow">
           <th>メーカー / モデル</th>
           <th>型式コード</th>
           <th>年式</th>
@@ -488,7 +500,7 @@
 
   <div class="pagination" id="pagination"></div>
 
-  <footer>
+  <footer id="footerText">
     非公式ミラーサイト / データソース: <a href="https://www.rover.infrastructure.gov.au/PublishedApprovals/SEVApprovals/" target="_blank" rel="noopener">ROVER公式サイト</a>（毎日自動取得）/ 公式登録簿ではありません
   </footer>
 </div>
@@ -501,6 +513,160 @@
 </div>
 
 <script>
+// ------- 多言語（日本語 / English） -------
+let LANG = "ja";
+try { LANG = localStorage.getItem("sev_lang") || "ja"; } catch(e){}
+
+const ROVER_LIST_URL = "https://www.rover.infrastructure.gov.au/PublishedApprovals/SEVApprovals/";
+
+const I18N = {
+  ja: {
+    siteTitle: "SEV検索（非公式ミラー）",
+    siteSub: "Specialist & Enthusiast Vehicles Register を検索しやすくした非公式サイト",
+    bannerTitle: "これは非公式のミラーサイトです",
+    bannerBody: `ROVER公式サイトのSEV登録データを毎日自動的に取り込んで表示しています。政府の公式登録簿ではないため、実際の輸入可否判断は必ず<a href="${ROVER_LIST_URL}" target="_blank" rel="noopener">ROVER公式サイト</a>で確認してください。`,
+    loadErrorTitle: "データを読み込めませんでした",
+    loadErrorBody: (msg) => `data/sev-data.json の取得に失敗しました（${msg}）。初回のGitHub Actions実行がまだ完了していないか、パスが正しくない可能性があります。`,
+    searchPlaceholder: "メーカー・車種・型式・SEV番号・モデルレポート番号で検索（あいまい検索対応）",
+    filterMake: "メーカー",
+    filterStatus: "有効期限の状態",
+    allMakes: (n) => `すべてのメーカー（${n}車種）`,
+    unknownMake: "不明",
+    statusAll: "すべて", statusValid: "有効", statusSoon: "まもなく失効", statusExpired: "失効済み", statusUnknown: "期限不明",
+    legendValid: "有効（3ヶ月超）", legendSoon: "まもなく失効（3ヶ月以内）", legendExpired: "失効済み",
+    loading: "読み込み中…", loadFailShort: "読み込みエラー",
+    countZero: "0件", countText: (total, s, e) => `全${total}件中 ${s}〜${e}件を表示`,
+    searchSuffix: (q) => `（検索語: 「${q}」）`,
+    updatedAt: (x) => `データ最終更新: ${x} / 期限判定は表示時点の日付で自動計算`,
+    updatedFail: "データ最終更新: 取得失敗", updatedUnknown: "不明",
+    tz: "（豪州時間）",
+    th: ["メーカー / モデル", "型式コード", "年式", "カテゴリ", "モデルレポート", "走行距離制限", "SEV番号", "有効期限"],
+    detailLink: "詳細を見る ›",
+    ariaDetail: (name) => `${name} の詳細を見る`,
+    copy: "コピー", copied: "コピー済",
+    sevMissing: "SEV番号が取得できていません",
+    othersN: (n) => `他${n}件`, codeOthersN: (n) => ` 他${n}`,
+    mreNone: "なし", mreCountN: (n) => `${n}件`,
+    noData: "記載なし",
+    longestOfN: (n) => `SEV ${n}件中の最長`,
+    welcabTag: "ウェルキャブ", welcabTagFull: "ウェルキャブ（福祉車両）",
+    yearUnknown: "年式不明", yearCurrent: (s) => `${s}年 – 現行`,
+    yearRange: (s, e) => `${s}年 – ${e}年`, yearSingle: (y) => `${y}年`,
+    uncategorized: "未分類",
+    dateLocale: "ja-JP",
+    expiryUnknown: "ROVER上に有効期限の記載がありません",
+    expiryExpired: (d, n) => `${d}（${n}日前に失効）`,
+    expirySoon: (d, n) => `${d}（あと${n}日）`,
+    expiryValid: (d) => `${d}まで有効`,
+    fYear: "年式", fMileage: "走行距離制限（最も厳しい条件）",
+    fSevEntries: (n) => `SEV登録（${n}件）`,
+    official: "公式 ↗", criterionLabel: "登録基準", targetLabel: "対象",
+    mreFieldN: (n) => `モデルレポート（RAWS工場の適合承認・${n}件）`,
+    mreFieldNone: "モデルレポート（RAWS工場の適合承認）",
+    mreNoneBody: "この車両を扱うモデルレポートはまだ見つかっていません。走行距離制限・エンジン条件・Welcab要件などの輸入条件はモデルレポート単位で定められるため、条件の詳細は各工場のレポート承認後に確定します。",
+    holderLabel: "保有",
+    odoLimitN: (n) => `走行距離 ${n}km未満`, odoNone: "走行距離条件の記載なし",
+    notesToggle: "条件メモを表示（Welcab要件・エンジン・ADR適合など）",
+    notesReport: "【レポートメモ】", notesCompliance: "【適合条件メモ】", notesNone: "条件メモの記載なし",
+    mileageVal: (km) => `${km}km未満（モデルレポート条件）`, mileageNone: "モデルレポートに記載なし",
+    actionSearch: "ROVER公式で検索 ↗", close: "閉じる",
+    marketTitle: "州別マーケット価格",
+    marketNone: "この車両の相場データはまだありません。data/market-data.json に該当エントリが無いか、このサイトでは相場機能を有効にしていません（README参照）。",
+    marketTitleFull: "州別マーケット価格（直近3週間）",
+    tableToggle: "表で見る", chartToggle: "グラフに戻る",
+    marketNote: "データ取得元・更新日は data/market-data.json の設定に依存します。参考情報としてご利用ください。",
+    noListings: "出品なし", listedN: (n) => `出品${n}件`,
+    weekLabels: ["3週間前", "2週間前", "1週間前", "現在"],
+    aggSub: (s, t) => `全国推定（${s}州・計${t}件の出品より算出）`,
+    aggNoListings: "この車種は出品が見つかりませんでした。",
+    deltaFlat: "→ 横ばい", deltaVs: "（3週間前比）", stateHeader: "州", listCountHeader: "出品数",
+    sparkAria: "過去3週間の価格推移スパークライン",
+    similar: "類似車両",
+    empty: "条件に一致する車両が見つかりませんでした。検索語を短くするか、別のフィルターを試してください。",
+    pagePrev: "前のページ", pageNext: "次のページ",
+    footer: `非公式ミラーサイト / データソース: <a href="${ROVER_LIST_URL}" target="_blank" rel="noopener">ROVER公式サイト</a>（毎日自動取得）/ 公式登録簿ではありません`,
+    themeDark: "ダークモード", themeLight: "ライトモード",
+    photoOwn: "登録写真",
+    photoWiki: (title) => `代表画像: ${title}（Wikipediaより・実車の写真ではありません）`,
+    langBtn: "EN",
+  },
+  en: {
+    siteTitle: "SEV Search (Unofficial Mirror)",
+    siteSub: "An unofficial, easier-to-search mirror of the Specialist & Enthusiast Vehicles Register",
+    bannerTitle: "This is an unofficial mirror site",
+    bannerBody: `SEV register data is automatically imported from ROVER every day. This is not the official government register — always confirm import eligibility on the <a href="${ROVER_LIST_URL}" target="_blank" rel="noopener">official ROVER site</a>.`,
+    loadErrorTitle: "Failed to load data",
+    loadErrorBody: (msg) => `Could not fetch data/sev-data.json (${msg}). The first GitHub Actions run may not have completed yet.`,
+    searchPlaceholder: "Search by make, model, model code, SEV number or Model Report number (fuzzy search)",
+    filterMake: "Make",
+    filterStatus: "Expiry status",
+    allMakes: (n) => `All makes (${n} models)`,
+    unknownMake: "Unknown",
+    statusAll: "All", statusValid: "Valid", statusSoon: "Expiring soon", statusExpired: "Expired", statusUnknown: "No expiry listed",
+    legendValid: "Valid (more than 3 months)", legendSoon: "Expiring within 3 months", legendExpired: "Expired",
+    loading: "Loading…", loadFailShort: "Load error",
+    countZero: "0 results", countText: (total, s, e) => `Showing ${s}–${e} of ${total}`,
+    searchSuffix: (q) => ` (search: "${q}")`,
+    updatedAt: (x) => `Data updated: ${x} / Expiry status is calculated as of today`,
+    updatedFail: "Data updated: fetch failed", updatedUnknown: "unknown",
+    tz: " (Australian time)",
+    th: ["Make / Model", "Model code", "Build years", "Category", "Model Reports", "Odometer limit", "SEV number", "Expiry"],
+    detailLink: "View details ›",
+    ariaDetail: (name) => `View details for ${name}`,
+    copy: "Copy", copied: "Copied",
+    sevMissing: "SEV number not captured",
+    othersN: (n) => `+${n} more`, codeOthersN: (n) => ` +${n}`,
+    mreNone: "None", mreCountN: (n) => `${n}`,
+    noData: "Not specified",
+    longestOfN: (n) => `Longest of ${n} SEV entries`,
+    welcabTag: "Welcab", welcabTagFull: "Welcab (mobility variant)",
+    yearUnknown: "Year unknown", yearCurrent: (s) => `${s} – present`,
+    yearRange: (s, e) => `${s} – ${e}`, yearSingle: (y) => `${y}`,
+    uncategorized: "Uncategorised",
+    dateLocale: "en-AU",
+    expiryUnknown: "No expiry date listed on ROVER",
+    expiryExpired: (d, n) => `${d} (expired ${n} days ago)`,
+    expirySoon: (d, n) => `${d} (${n} days left)`,
+    expiryValid: (d) => `Valid until ${d}`,
+    fYear: "Build years", fMileage: "Odometer limit (strictest condition)",
+    fSevEntries: (n) => `SEV entries (${n})`,
+    official: "Official ↗", criterionLabel: "Criterion", targetLabel: "Applies to",
+    mreFieldN: (n) => `Model Reports (RAWS approvals · ${n})`,
+    mreFieldNone: "Model Reports (RAWS approvals)",
+    mreNoneBody: "No Model Report covering this vehicle has been found yet. Import conditions such as odometer limits, engine requirements and Welcab restrictions are set per Model Report, so details are confirmed once a workshop's report is approved.",
+    holderLabel: "Holder",
+    odoLimitN: (n) => `Odometer under ${n} km`, odoNone: "No odometer condition listed",
+    notesToggle: "Show condition notes (Welcab requirements, engine, ADR compliance, etc.)",
+    notesReport: "[Report notes] ", notesCompliance: "[Compliance notes] ", notesNone: "No condition notes listed",
+    mileageVal: (km) => `Under ${km} km (Model Report condition)`, mileageNone: "Not specified in Model Reports",
+    actionSearch: "Search on official ROVER ↗", close: "Close",
+    marketTitle: "Market prices by state",
+    marketNone: "No market data for this vehicle yet. Either data/market-data.json has no entry for it, or the market feature is not enabled on this site (see README).",
+    marketTitleFull: "Market prices by state (last 3 weeks)",
+    tableToggle: "View as table", chartToggle: "Back to chart",
+    marketNote: "Data source and update time depend on data/market-data.json. For reference only.",
+    noListings: "No listings", listedN: (n) => `${n} listing${n === 1 ? "" : "s"}`,
+    weekLabels: ["3 wks ago", "2 wks ago", "1 wk ago", "Now"],
+    aggSub: (s, t) => `National estimate (${s} states, ${t} listings)`,
+    aggNoListings: "No listings found for this vehicle.",
+    deltaFlat: "→ flat", deltaVs: " (vs 3 wks ago)", stateHeader: "State", listCountHeader: "Listings",
+    sparkAria: "3-week price trend sparkline",
+    similar: "Similar vehicles",
+    empty: "No vehicles match your filters. Try a shorter search term or different filters.",
+    pagePrev: "Previous page", pageNext: "Next page",
+    footer: `Unofficial mirror / Data source: <a href="${ROVER_LIST_URL}" target="_blank" rel="noopener">official ROVER site</a> (updated daily) / Not the official register`,
+    themeDark: "Dark mode", themeLight: "Light mode",
+    photoOwn: "Photo",
+    photoWiki: (title) => `Representative image: ${title} (via Wikipedia — not the actual vehicle)`,
+    langBtn: "日本語",
+  },
+};
+
+function t(key, ...args){
+  const v = (I18N[LANG] && I18N[LANG][key] !== undefined) ? I18N[LANG][key] : I18N.ja[key];
+  return typeof v === "function" ? v(...args) : v;
+}
+
 // ------- 実データ（data/sev-data.json から読み込み。GitHub Actionsが毎日更新） -------
 let DATA = [];          // 車両データ本体（SEVエントリ単位・読み込み後に差し替え）
 let GROUPS = [];        // メーカー＋モデルでまとめたグループ（表示単位）
@@ -522,6 +688,23 @@ function isWelcabVehicle(v){
   return RE_WELCAB.test(
     [v.criterion, v.variant, v.variantDetails, v.model, v.code].filter(Boolean).join(" ")
   );
+}
+
+// 型式コード文字列から、スクレイパーが誤って巻き込んだページフッター等のゴミを除去する
+function cleanCode(s){
+  if(!s) return "";
+  return String(s)
+    .split(/\s*(?:Return to list|Website\s+RAV|Website|Contact Us|Privacy Statement|Privacy|Disclaimer|Copyright)\b/i)[0]
+    .replace(/[,\s]+$/, "")
+    .trim();
+}
+
+// 表示用の年式キー: 製造終了が "No end date"（buildEnd: null）の車は「開始年–」の形にする
+function yearKeyOf(e){
+  if(e && e.buildEnd === null && e.year && !String(e.year).includes("–")){
+    return String(e.year) + "–";
+  }
+  return e ? e.year : null;
 }
 
 function buildGroups(vehicles){
@@ -548,23 +731,20 @@ function buildGroups(vehicles){
   return [...map.values()].map(g => {
     delete g._mreSeen;
     const uniq = arr => [...new Set(arr.filter(Boolean))];
-    g.categories = uniq(g.entries.map(e => e.category || "未分類"));
-    g.codes = uniq(g.entries.map(e => e.code));
-    // 一覧表示用の短い型式表記（代表1つ＋残り件数）。完全なリストは詳細パネルで表示
+    g.categories = uniq(g.entries.map(e => e.category));
+    g.codes = uniq(g.entries.map(e => cleanCode(e.code)));
+    // 一覧表示用の短い型式表記（代表1つ＋残り件数は描画時に言語別で付与）
     g.codeTokens = uniq(g.entries.flatMap(e =>
-      String(e.codeFull || e.code || "").split(",").map(s => s.trim())
+      cleanCode(e.codeFull || e.code || "").split(",").map(s => s.trim())
     ));
-    g.codeShort = g.codeTokens.length
-      ? g.codeTokens[0] + (g.codeTokens.length > 1 ? ` 他${g.codeTokens.length - 1}` : "")
-      : "—";
-    g.years = uniq(g.entries.map(e => e.year));
+    g.years = uniq(g.entries.map(yearKeyOf));
     g.sevs = uniq(g.entries.map(e => e.sev));
     // グループの代表期限 = 最も先の有効期限（1つでも有効なら輸入経路があるため）
     const expiries = g.entries.map(e => e.expiry).filter(Boolean).sort();
     g.expiry = expiries.length ? expiries[expiries.length - 1] : null;
-    // 走行距離制限 = 全モデルレポート中の最小値
+    // 走行距離制限 = 全モデルレポート中の最小値（表示文字列は描画時に言語別で生成）
     const limits = g.modelReports.map(r => r.odometerLimitKm).filter(Boolean);
-    g.mileageLimit = limits.length ? `${Math.min(...limits).toLocaleString()}km未満（モデルレポート条件）` : null;
+    g.odoMinKm = limits.length ? Math.min(...limits) : null;
     g.roverId = (g.entries.find(e => e.roverId) || {}).roverId || null;
     // 検索用の結合文字列
     g.codesJoined = g.codeTokens.join(" ");
@@ -584,10 +764,10 @@ const makeSelect = document.getElementById("makeSelect");
 const statusChips = document.getElementById("statusChips");
 
 const STATUS_DEFS = {
-  valid:   {label:"有効",         color:"var(--ok-text)"},
-  soon:    {label:"まもなく失効", color:"var(--soon-text)"},
-  expired: {label:"失効済み",     color:"var(--exp-text)"},
-  unknown: {label:"期限不明",     color:"var(--text-muted)"},
+  valid:   {tkey:"statusValid",   color:"var(--ok-text)"},
+  soon:    {tkey:"statusSoon",    color:"var(--soon-text)"},
+  expired: {tkey:"statusExpired", color:"var(--exp-text)"},
+  unknown: {tkey:"statusUnknown", color:"var(--text-muted)"},
 };
 
 function getStatus(expiryStr){
@@ -603,11 +783,11 @@ function getStatus(expiryStr){
 }
 
 function statusDateText(item, status){
-  if(status.key === "unknown") return "ROVER上に有効期限の記載がありません";
-  const d = new Date(item.expiry + "T00:00:00").toLocaleDateString("ja-JP");
-  if(status.key === "expired") return `${d}（${Math.abs(status.diffDays)}日前に失効）`;
-  if(status.key === "soon") return `${d}（あと${status.diffDays}日）`;
-  return `${d}まで有効`;
+  if(status.key === "unknown") return t("expiryUnknown");
+  const d = new Date(item.expiry + "T00:00:00").toLocaleDateString(t("dateLocale"));
+  if(status.key === "expired") return t("expiryExpired", d, Math.abs(status.diffDays));
+  if(status.key === "soon") return t("expirySoon", d, status.diffDays);
+  return t("expiryValid", d);
 }
 
 function populateMakeSelect(){
@@ -615,15 +795,15 @@ function populateMakeSelect(){
   const counts = new Map();
   const display = new Map();
   GROUPS.forEach(g => {
-    const key = (g.make || "不明").trim().toUpperCase();
+    const key = (g.make || t("unknownMake")).trim().toUpperCase();
     counts.set(key, (counts.get(key) || 0) + 1);
-    if(!display.has(key)) display.set(key, (g.make || "不明").trim());
+    if(!display.has(key)) display.set(key, (g.make || t("unknownMake")).trim());
   });
   const sorted = [...counts.keys()].sort();
   makeSelect.innerHTML = "";
   const allOpt = document.createElement("option");
   allOpt.value = "すべて";
-  allOpt.textContent = `すべてのメーカー（${GROUPS.length}車種）`;
+  allOpt.textContent = t("allMakes", GROUPS.length);
   makeSelect.appendChild(allOpt);
   sorted.forEach(key => {
     const opt = document.createElement("option");
@@ -643,10 +823,10 @@ makeSelect.addEventListener("change", () => {
 function renderChips(){
   statusChips.innerHTML = "";
   const statusOptions = [
-    {key:"すべて", label:"すべて", color:null},
-    {key:"valid", label:"有効", color:"var(--ok-text)"},
-    {key:"soon", label:"まもなく失効", color:"var(--soon-text)"},
-    {key:"expired", label:"失効済み", color:"var(--exp-text)"},
+    {key:"すべて", label:t("statusAll"), color:null},
+    {key:"valid", label:t("statusValid"), color:"var(--ok-text)"},
+    {key:"soon", label:t("statusSoon"), color:"var(--soon-text)"},
+    {key:"expired", label:t("statusExpired"), color:"var(--exp-text)"},
   ];
   statusOptions.forEach(opt => {
     const chip = document.createElement("button");
@@ -685,7 +865,7 @@ function copySev(sev, btn, evt){
   if(evt) evt.stopPropagation();
   navigator.clipboard.writeText(sev).then(() => {
     const original = btn.textContent;
-    btn.textContent = "コピー済";
+    btn.textContent = t("copied");
     btn.classList.add("copied");
     setTimeout(() => { btn.textContent = original; btn.classList.remove("copied"); }, 1200);
   });
@@ -693,13 +873,13 @@ function copySev(sev, btn, evt){
 
 function sevCellHtml(group, query){
   if(!group.sevs || group.sevs.length === 0){
-    return `<span class="muted-small">SEV番号が取得できていません</span>`;
+    return `<span class="muted-small">${t("sevMissing")}</span>`;
   }
   const first = group.sevs[0];
-  const extra = group.sevs.length > 1 ? ` <span class="muted-small">他${group.sevs.length - 1}件</span>` : "";
+  const extra = group.sevs.length > 1 ? ` <span class="muted-small">${t("othersN", group.sevs.length - 1)}</span>` : "";
   return `<div class="sev-cell">
       <span>${highlight(first, query || "")}${extra}</span>
-      <button class="copy-btn" type="button" data-copy="${escapeHtml(first)}">コピー</button>
+      <button class="copy-btn" type="button" data-copy="${escapeHtml(first)}">${t("copy")}</button>
     </div>`;
 }
 
@@ -742,8 +922,8 @@ function similarItemHtml(group){
   return `<button class="similar-item" type="button" data-id="${itemId(group)}">
       <div class="si-title">${escapeHtml(group.make)} ${escapeHtml(group.model)}</div>
       <div class="si-meta">
-        <span>${escapeHtml(group.codes[0] || "—")} ・ <span class="cat-tag">${escapeHtml(group.categories[0] || "未分類")}</span></span>
-        <span style="color:${def.color};font-weight:600;">${def.label}</span>
+        <span>${escapeHtml(group.codes[0] || "—")} ・ <span class="cat-tag">${escapeHtml(group.categories[0] || t("uncategorized"))}</span></span>
+        <span style="color:${def.color};font-weight:600;">${t(def.tkey)}</span>
       </div>
     </button>`;
 }
@@ -752,7 +932,7 @@ function similarItemHtml(group){
 // このサイトは carsales.com.au 等の商用サイトを自動スクレイピングしていません。
 // data/market-data.json が存在し、該当車両のエントリがある場合のみ実データを表示します。
 // ファイルが無い／該当が無い場合は「相場データなし」を表示します（詳しくはREADME参照）。
-const WEEK_LABELS = ["3週間前", "2週間前", "1週間前", "現在"];
+function WEEK_LABELS(){ return t("weekLabels"); }
 
 function getMarketDataFor(item){
   if(!MARKET_DATA || !MARKET_DATA.byRoverId) return null;
@@ -777,19 +957,19 @@ function sparklineSvg(prices){
     const isLast = i === pts.length - 1;
     return `<circle class="spark-pt" tabindex="0" cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="${isLast ? 3.5 : 2.5}"
       fill="${isLast ? "var(--accent)" : "var(--text-muted)"}" stroke="var(--surface-alt)" stroke-width="2">
-      <title>${WEEK_LABELS[i]}: ${formatAud(pt.p)}</title>
+      <title>${WEEK_LABELS()[i]}: ${formatAud(pt.p)}</title>
     </circle>`;
   }).join("");
-  return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="34" role="img" aria-label="過去3週間の価格推移スパークライン">
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="34" role="img" aria-label="${t('sparkAria')}">
       <path d="${pathD}" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity="0.55"/>
       ${dots}
     </svg>`;
 }
 
 function deltaText(deltaPct){
-  if(Math.abs(deltaPct) < 0.5) return "→ 横ばい";
+  if(Math.abs(deltaPct) < 0.5) return t("deltaFlat");
   const arrow = deltaPct > 0 ? "▲" : "▼";
-  return `${arrow} ${Math.abs(deltaPct).toFixed(1)}%（3週間前比）`;
+  return `${arrow} ${Math.abs(deltaPct).toFixed(1)}%${t("deltaVs")}`;
 }
 
 function marketSectionHtml(item){
@@ -799,9 +979,9 @@ function marketSectionHtml(item){
     return `
       <div class="market-section">
         <div class="market-head">
-          <h3>州別マーケット価格</h3>
+          <h3>${t("marketTitle")}</h3>
         </div>
-        <div class="market-note">この車両の相場データはまだありません。data/market-data.json に該当エントリが無いか、このサイトでは相場機能を有効にしていません（README参照）。</div>
+        <div class="market-note">${t("marketNone")}</div>
       </div>
     `;
   }
@@ -810,15 +990,15 @@ function marketSectionHtml(item){
     <div class="market-agg">
       <span class="agg-value">${formatAud(data.agg.current)}</span>
       <span class="agg-delta">${deltaText(data.agg.deltaPct)}</span>
-      <span class="agg-sub">全国推定（${data.agg.stateCount}州・計${data.agg.totalCount}件の出品より算出）</span>
+      <span class="agg-sub">${t("aggSub", data.agg.stateCount, data.agg.totalCount)}</span>
     </div>
-  ` : `<div class="market-agg"><span class="agg-sub">この車種は出品が見つかりませんでした。</span></div>`;
+  ` : `<div class="market-agg"><span class="agg-sub">${t("aggNoListings")}</span></div>`;
 
   const tiles = data.states.map(s => {
     if(!s.prices){
       return `<div class="state-tile">
           <div class="st-label">${s.code}</div>
-          <div class="st-empty">出品なし</div>
+          <div class="st-empty">${t("noListings")}</div>
         </div>`;
     }
     const delta = ((s.prices[3] - s.prices[0]) / s.prices[0]) * 100;
@@ -827,31 +1007,31 @@ function marketSectionHtml(item){
         <div class="st-value">${formatAud(s.prices[3])}</div>
         <div class="st-delta">${deltaText(delta)}</div>
         ${sparklineSvg(s.prices)}
-        <div class="st-count">出品${s.count}件</div>
+        <div class="st-count">${t("listedN", s.count)}</div>
       </div>`;
   }).join("");
 
   const tableRows = data.states.map(s => {
-    if(!s.prices) return `<tr><td>${s.code}（${s.name}）</td><td colspan="5">出品なし</td></tr>`;
+    if(!s.prices) return `<tr><td>${s.code}（${s.name}）</td><td colspan="5">${t("noListings")}</td></tr>`;
     return `<tr>
         <td>${s.code}（${s.name}）</td>
         ${s.prices.map(p => `<td>${formatAud(p)}</td>`).join("")}
-        <td>${s.count}件</td>
+        <td>${t("listedN", s.count)}</td>
       </tr>`;
   }).join("");
 
   return `
     <div class="market-section">
       <div class="market-head">
-        <h3>州別マーケット価格（直近3週間）</h3>
-        <button class="market-toggle-btn" type="button" data-market-table-toggle="1">表で見る</button>
+        <h3>${t("marketTitleFull")}</h3>
+        <button class="market-toggle-btn" type="button" data-market-table-toggle="1">${t("tableToggle")}</button>
       </div>
-      <div class="market-note">データ取得元・更新日は data/market-data.json の設定に依存します。参考情報としてご利用ください。</div>
+      <div class="market-note">${t("marketNote")}</div>
       ${aggHtml}
       <div class="state-grid">${tiles}</div>
       <div class="market-table-wrap" hidden data-market-table="1">
         <table class="market-table">
-          <thead><tr><th>州</th><th>${WEEK_LABELS[0]}</th><th>${WEEK_LABELS[1]}</th><th>${WEEK_LABELS[2]}</th><th>${WEEK_LABELS[3]}</th><th>出品数</th></tr></thead>
+          <thead><tr><th>${t("stateHeader")}</th><th>${WEEK_LABELS()[0]}</th><th>${WEEK_LABELS()[1]}</th><th>${WEEK_LABELS()[2]}</th><th>${WEEK_LABELS()[3]}</th><th>${t("listCountHeader")}</th></tr></thead>
           <tbody>${tableRows}</tbody>
         </table>
       </div>
@@ -861,25 +1041,25 @@ function marketSectionHtml(item){
 
 function sevEntriesFieldHtml(group){
   const rows = group.entries.map(e => {
-    const sevLabel = e.sev ? escapeHtml(e.sev) : "SEV番号なし";
+    const sevLabel = e.sev ? escapeHtml(e.sev) : t("sevMissing");
     const link = e.roverId
-      ? ` <a href="https://www.rover.infrastructure.gov.au/PublishedApprovals/SEVDetails/?id=${encodeURIComponent(e.roverId)}" target="_blank" rel="noopener">公式 ↗</a>`
+      ? ` <a href="https://www.rover.infrastructure.gov.au/PublishedApprovals/SEVDetails/?id=${encodeURIComponent(e.roverId)}" target="_blank" rel="noopener">${t("official")}</a>`
       : "";
-    const meta = [e.codeFull || e.code, e.year ? formatYear(e.year) : null, e.category]
+    const meta = [cleanCode(e.codeFull || e.code), e.year ? formatYear(yearKeyOf(e)) : null, e.category]
       .filter(Boolean).map(escapeHtml).join(" ・ ");
     const extra = [
-      e.criterion ? `登録基準: ${escapeHtml(e.criterion)}` : null,
-      e.variantDetails ? `対象: ${escapeHtml(e.variantDetails)}` : (e.variant ? `対象: ${escapeHtml(e.variant)}` : null),
+      e.criterion ? `${t("criterionLabel")}: ${escapeHtml(e.criterion)}` : null,
+      e.variantDetails ? `${t("targetLabel")}: ${escapeHtml(e.variantDetails)}` : (e.variant ? `${t("targetLabel")}: ${escapeHtml(e.variant)}` : null),
     ].filter(Boolean).join(" ／ ");
     const extraLine = extra ? `<br><span class="muted-small">${extra}</span>` : "";
-    const copyBtn = e.sev ? ` <button class="copy-btn" type="button" data-copy="${escapeHtml(e.sev)}">コピー</button>` : "";
+    const copyBtn = e.sev ? ` <button class="copy-btn" type="button" data-copy="${escapeHtml(e.sev)}">${t("copy")}</button>` : "";
     return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border-top:1px dashed var(--border);flex-wrap:wrap;">
         <div><strong>${sevLabel}</strong>${copyBtn}${link}<br><span class="muted-small">${meta}</span>${extraLine}</div>
         <div>${statusBadgeHtml(e)}</div>
       </div>`;
   }).join("");
   return `<div class="modal-field span-2">
-      <div class="f-label">SEV登録（${group.entries.length}件）</div>
+      <div class="f-label">${t("fSevEntries", group.entries.length)}</div>
       ${rows}
     </div>`;
 }
@@ -888,25 +1068,25 @@ function modelReportsFieldHtml(group){
   const reports = group.modelReports || [];
   if(reports.length === 0){
     return `<div class="modal-field span-2">
-        <div class="f-label">モデルレポート（RAWS工場の適合承認）</div>
-        <div class="muted-small">この車両を扱うモデルレポートはまだ見つかっていません。走行距離制限・エンジン条件・Welcab要件などの輸入条件はモデルレポート単位で定められるため、条件の詳細は各工場のレポート承認後に確定します。</div>
+        <div class="f-label">${t("mreFieldNone")}</div>
+        <div class="muted-small">${t("mreNoneBody")}</div>
       </div>`;
   }
   const rows = reports.map(r => {
     const link = r.roverId
-      ? `<a href="https://www.rover.infrastructure.gov.au/PublishedApprovals/ModelReportDetails/?id=${encodeURIComponent(r.roverId)}" target="_blank" rel="noopener">${escapeHtml(r.mre || "モデルレポート")} ↗</a>`
-      : escapeHtml(r.mre || "モデルレポート");
-    const holder = r.holder ? `<span class="muted-small">保有: ${escapeHtml(r.holder)}</span>` : "";
+      ? `<a href="https://www.rover.infrastructure.gov.au/PublishedApprovals/ModelReportDetails/?id=${encodeURIComponent(r.roverId)}" target="_blank" rel="noopener">${escapeHtml(r.mre || "Model Report")} ↗</a>`
+      : escapeHtml(r.mre || "Model Report");
+    const holder = r.holder ? `<span class="muted-small">${t("holderLabel")}: ${escapeHtml(r.holder)}</span>` : "";
     const limit = r.odometerLimitKm
-      ? `走行距離 ${Number(r.odometerLimitKm).toLocaleString()}km未満`
-      : "走行距離条件の記載なし";
+      ? t("odoLimitN", Number(r.odometerLimitKm).toLocaleString())
+      : t("odoNone");
     const status = r.status ? `・${escapeHtml(r.status)}` : "";
     const notes = [];
-    if(r.reportNotes) notes.push(`【レポートメモ】${escapeHtml(r.reportNotes)}`);
-    if(r.complianceNotes) notes.push(`【適合条件メモ】${escapeHtml(r.complianceNotes)}`);
+    if(r.reportNotes) notes.push(`${t("notesReport")}${escapeHtml(r.reportNotes)}`);
+    if(r.complianceNotes) notes.push(`${t("notesCompliance")}${escapeHtml(r.complianceNotes)}`);
     const notesHtml = notes.length
-      ? `<details style="margin-top:4px;"><summary class="muted-small" style="cursor:pointer;">条件メモを表示（Welcab要件・エンジン・ADR適合など）</summary><div class="muted-small" style="padding:6px 0 2px;white-space:pre-wrap;">${notes.join("\n\n")}</div></details>`
-      : `<div class="muted-small">条件メモの記載なし</div>`;
+      ? `<details style="margin-top:4px;"><summary class="muted-small" style="cursor:pointer;">${t("notesToggle")}</summary><div class="muted-small" style="padding:6px 0 2px;white-space:pre-wrap;">${notes.join("\n\n")}</div></details>`
+      : `<div class="muted-small">${t("notesNone")}</div>`;
     return `<div style="padding:8px 0;border-top:1px dashed var(--border);">
         <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;">
           <span>${link} <span class="muted-small">（${limit}${status}）</span></span>
@@ -916,46 +1096,50 @@ function modelReportsFieldHtml(group){
       </div>`;
   }).join("");
   return `<div class="modal-field span-2">
-      <div class="f-label">モデルレポート（RAWS工場の適合承認・${reports.length}件）</div>
+      <div class="f-label">${t("mreFieldN", reports.length)}</div>
       ${rows}
     </div>`;
 }
 
 function renderDetailHtml(group){
   const similar = findSimilar(group);
-  const welcabTag = group.isWelcab ? ` <span class="welcab-tag">ウェルキャブ（福祉車両）</span>` : "";
-  const catTags = group.categories.map(c => `<span class="cat-tag">${escapeHtml(c)}</span>`).join(" ") + welcabTag;
+  const welcabTag = group.isWelcab ? ` <span class="welcab-tag">${t("welcabTagFull")}</span>` : "";
+  const cats = group.categories.length ? group.categories : [t("uncategorized")];
+  const catTags = cats.map(c => `<span class="cat-tag">${escapeHtml(c)}</span>`).join(" ") + welcabTag;
   const yearBadges = group.years.length
     ? group.years.map(y => `<span class="year-badge">${formatYear(y)}</span>`).join(" ")
-    : `<span class="year-badge">年式不明</span>`;
+    : `<span class="year-badge">${t("yearUnknown")}</span>`;
+  const th = t("th");
   return `
     <div class="modal-header">
       <h2 id="modalTitle">${escapeHtml(group.make)} ${escapeHtml(group.model)}</h2>
-      <div class="modal-sub">型式コード ${escapeHtml(group.codeTokens.join(", ") || "—")} ・ ${catTags}</div>
+      <div class="modal-sub">${th[1]} ${escapeHtml(group.codeTokens.join(", ") || "—")} ・ ${catTags}</div>
     </div>
+
+    <div class="vehicle-photo" id="vehiclePhoto" hidden></div>
 
     <div class="modal-grid">
       <div class="modal-field">
-        <div class="f-label">年式</div>
+        <div class="f-label">${t("fYear")}</div>
         <div>${yearBadges}</div>
       </div>
       <div class="modal-field">
-        <div class="f-label">走行距離制限（最も厳しい条件）</div>
-        <div>${escapeHtml(group.mileageLimit || "モデルレポートに記載なし")}</div>
+        <div class="f-label">${t("fMileage")}</div>
+        <div>${escapeHtml(group.odoMinKm ? t("mileageVal", group.odoMinKm.toLocaleString()) : t("mileageNone"))}</div>
       </div>
       ${sevEntriesFieldHtml(group)}
       ${modelReportsFieldHtml(group)}
     </div>
 
     <div class="modal-actions">
-      <a href="https://www.rover.infrastructure.gov.au/PublishedApprovals/SEVApprovals/" target="_blank" rel="noopener">ROVER公式で検索 ↗</a>
-      <button type="button" data-close="1">閉じる</button>
+      <a href="${ROVER_LIST_URL}" target="_blank" rel="noopener">${t("actionSearch")}</a>
+      <button type="button" data-close="1">${t("close")}</button>
     </div>
 
     ${marketSectionHtml(group)}
 
     <div class="similar-section">
-      <h3>類似車両</h3>
+      <h3>${t("similar")}</h3>
       <div class="similar-grid">
         ${similar.map(similarItemHtml).join("")}
       </div>
@@ -967,11 +1151,85 @@ const modalOverlay = document.getElementById("modalOverlay");
 const modalContent = document.getElementById("modalContent");
 const modalClose = document.getElementById("modalClose");
 
+// ------- 車両写真 -------
+// 1) リポジトリの images/<SEV番号>.jpg（自分の写真）を最優先で表示
+// 2) 無ければWikipediaの代表画像を検索して表示（出典リンク・注意書き付き）
+function tryLoadImage(url){
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => resolve(true);
+    img.onerror = () => resolve(false);
+    img.src = url;
+  });
+}
+
+function photoSearchQuery(group){
+  let model = (group.model || "").split("/")[0];
+  model = model.replace(/welcab|chaircab|welfare|variant|only/ig, " ").replace(/\s+/g, " ").trim();
+  return `${(group.make || "").trim()} ${model}`.trim();
+}
+
+let photoRequestSeq = 0;
+async function loadVehiclePhoto(group){
+  const container = document.getElementById("vehiclePhoto");
+  if(!container) return;
+  const seq = ++photoRequestSeq;
+  container.hidden = true;
+  container.innerHTML = "";
+
+  // 1) 自分の写真（images/SEV-xxxxxx.jpg / .png / .webp）
+  for(const sev of (group.sevs || []).slice(0, 2)){
+    for(const ext of ["jpg", "png", "webp"]){
+      const url = `images/${encodeURIComponent(sev)}.${ext}`;
+      if(await tryLoadImage(url)){
+        if(seq !== photoRequestSeq) return; // 別の車を開き直していたら中断
+        container.innerHTML = `<img src="${url}" alt="">` +
+          `<div class="photo-caption">${t("photoOwn")}</div>`;
+        container.hidden = false;
+        return;
+      }
+    }
+  }
+
+  // 2) Wikipediaの代表画像
+  try{
+    const q = photoSearchQuery(group);
+    if(!q) return;
+    const api = "https://en.wikipedia.org/w/api.php?action=query&format=json&origin=*" +
+      "&generator=search&gsrlimit=1&gsrsearch=" + encodeURIComponent(q) +
+      "&prop=pageimages%7Cinfo&inprop=url&piprop=thumbnail&pithumbsize=640";
+    const res = await fetch(api);
+    if(!res.ok) return;
+    const json = await res.json();
+    const pages = json.query && json.query.pages ? Object.values(json.query.pages) : [];
+    const page = pages[0];
+    if(!page || !page.thumbnail || !page.thumbnail.source) return;
+    if(seq !== photoRequestSeq) return;
+    const img = document.createElement("img");
+    img.alt = "";
+    img.src = page.thumbnail.source;
+    const caption = document.createElement("div");
+    caption.className = "photo-caption";
+    const link = document.createElement("a");
+    link.href = page.fullurl || ("https://en.wikipedia.org/?curid=" + page.pageid);
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = t("photoWiki", page.title);
+    caption.appendChild(link);
+    container.appendChild(img);
+    container.appendChild(caption);
+    container.hidden = false;
+  }catch(e){
+    // 写真が出ないだけなので静かに無視
+  }
+}
+
 function showDetailUI(item){
   modalContent.innerHTML = renderDetailHtml(item);
   modalOverlay.hidden = false;
   modalOverlay.scrollTop = 0;
   document.body.style.overflow = "hidden";
+  loadVehiclePhoto(item);
 
   modalContent.querySelectorAll(".copy-btn").forEach(btn => {
     btn.addEventListener("click", (e) => copySev(btn.dataset.copy, btn, e));
@@ -988,7 +1246,7 @@ function showDetailUI(item){
     marketToggle.addEventListener("click", () => {
       const nowHidden = marketTable.hidden;
       marketTable.hidden = !nowHidden;
-      marketToggle.textContent = nowHidden ? "グラフに戻る" : "表で見る";
+      marketToggle.textContent = nowHidden ? t("chartToggle") : t("tableToggle");
     });
   }
 }
@@ -1025,19 +1283,23 @@ modalOverlay.addEventListener("click", (e) => { if(e.target === modalOverlay) cl
 document.addEventListener("keydown", (e) => { if(e.key === "Escape" && !modalOverlay.hidden) closeDetail(); });
 
 function formatYear(y){
-  if(!y) return "年式不明";
+  if(!y) return t("yearUnknown");
+  y = String(y);
+  if(y.endsWith("–")){
+    return t("yearCurrent", y.slice(0, -1));
+  }
   if(y.includes("–")){
     const [s, e] = y.split("–");
-    return `${s}年 – ${e}年`;
+    return t("yearRange", s, e);
   }
-  return `${y}年`;
+  return t("yearSingle", y);
 }
 
 function statusBadgeHtml(item){
   const status = getStatus(item.expiry);
   const def = STATUS_DEFS[status.key];
   return `<div class="status-badge ${status.key}">
-      <span class="s-label"><span class="dot"></span>${def.label}</span>
+      <span class="s-label"><span class="dot"></span>${t(def.tkey)}</span>
       <span>${statusDateText(item, status)}</span>
     </div>`;
 }
@@ -1069,10 +1331,10 @@ function runSearch(){
   const pageResults = results.slice(startIdx, startIdx + PAGE_SIZE);
 
   if(total === 0){
-    resultCount.textContent = "0件" + (query ? `（検索語: 「${escapeHtml(query)}」）` : "");
+    resultCount.textContent = t("countZero") + (query ? t("searchSuffix", escapeHtml(query)) : "");
   }else{
-    resultCount.textContent = `全${total}件中 ${startIdx + 1}〜${startIdx + pageResults.length}件を表示` +
-      (query ? `（検索語: 「${escapeHtml(query)}」）` : "");
+    resultCount.textContent = t("countText", total, startIdx + 1, startIdx + pageResults.length) +
+      (query ? t("searchSuffix", escapeHtml(query)) : "");
   }
 
   tableBody.innerHTML = "";
@@ -1087,17 +1349,23 @@ function runSearch(){
   emptyState.style.display = "none";
   document.querySelector(".table-scroll").style.visibility = "visible";
 
+  const th = t("th");
   pageResults.forEach(group => {
-    const label = `${group.make} ${group.model} の詳細を見る`;
-    const welcabTag = group.isWelcab ? ` <span class="welcab-tag">ウェルキャブ</span>` : "";
-    const catTags = group.categories.map(c => `<span class="cat-tag">${escapeHtml(c)}</span>`).join(" ") + welcabTag;
-    const yearText = group.years.length ? group.years.map(formatYear).join(" / ") : "年式不明";
+    const label = t("ariaDetail", `${group.make} ${group.model}`);
+    const welcabTag = group.isWelcab ? ` <span class="welcab-tag">${t("welcabTag")}</span>` : "";
+    const cats = group.categories.length ? group.categories : [t("uncategorized")];
+    const catTags = cats.map(c => `<span class="cat-tag">${escapeHtml(c)}</span>`).join(" ") + welcabTag;
+    const yearText = group.years.length ? group.years.map(formatYear).join(" / ") : t("yearUnknown");
+    const codeShort = group.codeTokens.length
+      ? group.codeTokens[0] + (group.codeTokens.length > 1 ? t("codeOthersN", group.codeTokens.length - 1) : "")
+      : "—";
+    const mileageText = group.odoMinKm ? t("mileageVal", group.odoMinKm.toLocaleString()) : t("noData");
     const mreCount = group.modelReports.length;
     const mreSummary = mreCount > 0
-      ? `${mreCount}件`
-      : `<span class="muted-small">なし</span>`;
+      ? t("mreCountN", mreCount)
+      : `<span class="muted-small">${t("mreNone")}</span>`;
     const entryNote = group.entries.length > 1
-      ? `<br><span class="muted-small">SEV ${group.entries.length}件中の最長</span>`
+      ? `<br><span class="muted-small">${t("longestOfN", group.entries.length)}</span>`
       : "";
 
     // table row
@@ -1106,12 +1374,12 @@ function runSearch(){
     tr.setAttribute("role", "button");
     tr.setAttribute("aria-label", label);
     tr.innerHTML = `
-      <td><strong>${highlight(group.make, query)}</strong><br>${highlight(group.model, query)}<br><button class="detail-link" type="button">詳細を見る ›</button></td>
-      <td>${highlight(group.codeShort, query)}</td>
+      <td><strong>${highlight(group.make, query)}</strong><br>${highlight(group.model, query)}<br><button class="detail-link" type="button">${t("detailLink")}</button></td>
+      <td>${highlight(codeShort, query)}</td>
       <td><span class="year-badge">${escapeHtml(yearText)}</span></td>
       <td>${catTags}</td>
       <td>${mreSummary}</td>
-      <td>${escapeHtml(group.mileageLimit || "記載なし")}</td>
+      <td>${escapeHtml(mileageText)}</td>
       <td>${sevCellHtml(group, query)}</td>
       <td>${statusBadgeHtml(group)}${entryNote}</td>
     `;
@@ -1132,15 +1400,15 @@ function runSearch(){
         <div class="card-title">${highlight(group.make, query)} ${highlight(group.model, query)}</div>
         <span>${catTags}</span>
       </div>
-      <div class="card-row"><span class="label">型式コード</span><span class="val">${highlight(group.codeShort, query)}</span></div>
-      <div class="card-row"><span class="label">年式</span><span class="val"><span class="year-badge">${escapeHtml(yearText)}</span></span></div>
-      <div class="card-row"><span class="label">モデルレポート</span><span class="val">${mreSummary}</span></div>
-      <div class="card-row"><span class="label">走行距離制限</span><span class="val">${escapeHtml(group.mileageLimit || "記載なし")}</span></div>
-      <div class="card-row"><span class="label">SEV番号</span>
+      <div class="card-row"><span class="label">${th[1]}</span><span class="val">${highlight(codeShort, query)}</span></div>
+      <div class="card-row"><span class="label">${th[2]}</span><span class="val"><span class="year-badge">${escapeHtml(yearText)}</span></span></div>
+      <div class="card-row"><span class="label">${th[4]}</span><span class="val">${mreSummary}</span></div>
+      <div class="card-row"><span class="label">${th[5]}</span><span class="val">${escapeHtml(mileageText)}</span></div>
+      <div class="card-row"><span class="label">${th[6]}</span>
         <span class="val">${sevCellHtml(group, query)}</span>
       </div>
-      <div class="card-row"><span class="label">有効期限</span><span class="val">${statusBadgeHtml(group)}${entryNote}</span></div>
-      <button class="detail-link" type="button">詳細を見る ›</button>
+      <div class="card-row"><span class="label">${th[7]}</span><span class="val">${statusBadgeHtml(group)}${entryNote}</span></div>
+      <button class="detail-link" type="button">${t("detailLink")}</button>
     `;
     const cardCopyBtn = card.querySelector(".copy-btn");
     if(cardCopyBtn) cardCopyBtn.addEventListener("click", (e) => copySev(cardCopyBtn.dataset.copy, e.target, e));
@@ -1183,7 +1451,7 @@ function renderPagination(totalPages){
     paginationEl.appendChild(span);
   };
 
-  addBtn("‹", currentPage - 1, {disabled: currentPage === 1, ariaLabel: "前のページ"});
+  addBtn("‹", currentPage - 1, {disabled: currentPage === 1, ariaLabel: t("pagePrev")});
 
   // 表示するページ番号: 1, 最後, 現在±2（間は…で省略）
   const pages = new Set([1, totalPages]);
@@ -1198,7 +1466,7 @@ function renderPagination(totalPages){
     prev = p;
   }
 
-  addBtn("›", currentPage + 1, {disabled: currentPage === totalPages, ariaLabel: "次のページ"});
+  addBtn("›", currentPage + 1, {disabled: currentPage === totalPages, ariaLabel: t("pageNext")});
 }
 
 searchInput.addEventListener("input", () => {
@@ -1212,11 +1480,64 @@ clearBtn.addEventListener("click", () => {
   searchInput.focus();
 });
 
+function themeToggleText(){
+  const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+  return isDark ? t("themeLight") : t("themeDark");
+}
+
 document.getElementById("themeToggle").addEventListener("click", () => {
   const html = document.documentElement;
   const isDark = html.getAttribute("data-theme") === "dark";
   html.setAttribute("data-theme", isDark ? "light" : "dark");
-  document.getElementById("themeToggle").textContent = isDark ? "ダークモード" : "ライトモード";
+  document.getElementById("themeToggle").textContent = themeToggleText();
+});
+
+// ------- 言語切り替え -------
+function applyI18n(){
+  document.documentElement.lang = LANG;
+  document.title = LANG === "ja" ? "SEV検索 - 非公式ミラー" : "SEV Search - Unofficial Mirror";
+  const set = (id, key, useHtml) => {
+    const el = document.getElementById(id);
+    if(!el) return;
+    if(useHtml) el.innerHTML = t(key);
+    else el.textContent = t(key);
+  };
+  set("siteTitle", "siteTitle");
+  set("siteSub", "siteSub");
+  set("bannerTitle", "bannerTitle");
+  set("bannerBody", "bannerBody", true);
+  set("loadErrorTitle", "loadErrorTitle");
+  set("filterMakeLabel", "filterMake");
+  set("filterStatusLabel", "filterStatus");
+  set("legendValid", "legendValid");
+  set("legendSoon", "legendSoon");
+  set("legendExpired", "legendExpired");
+  set("emptyState", "empty");
+  set("footerText", "footer", true);
+  searchInput.placeholder = t("searchPlaceholder");
+  const headRow = document.getElementById("tableHeadRow");
+  if(headRow){
+    const ths = headRow.querySelectorAll("th");
+    t("th").forEach((label, i) => { if(ths[i]) ths[i].textContent = label; });
+  }
+  document.getElementById("themeToggle").textContent = themeToggleText();
+  document.getElementById("langToggle").textContent = t("langBtn");
+  modalClose.setAttribute("aria-label", t("close"));
+}
+
+document.getElementById("langToggle").addEventListener("click", () => {
+  LANG = (LANG === "ja") ? "en" : "ja";
+  try { localStorage.setItem("sev_lang", LANG); } catch(e){}
+  applyI18n();
+  if(fuse){
+    populateMakeSelect();
+    renderChips();
+    runSearch();
+    handleHashChange(); // 開いている詳細パネルも新しい言語で再描画
+    if(LAST_UPDATED_ISO){
+      updatedAtText.textContent = t("updatedAt", formatUpdatedAt(LAST_UPDATED_ISO));
+    }
+  }
 });
 
 // ------- データ読み込み -------
@@ -1225,11 +1546,13 @@ const loadError = document.getElementById("loadError");
 const loadErrorDetail = document.getElementById("loadErrorDetail");
 
 function formatUpdatedAt(iso){
-  if(!iso) return "不明";
+  if(!iso) return t("updatedUnknown");
   const d = new Date(iso);
   if(isNaN(d.getTime())) return iso;
-  return d.toLocaleString("ja-JP", { timeZone: "Australia/Brisbane", dateStyle: "medium", timeStyle: "short" }) + "（豪州時間）";
+  return d.toLocaleString(t("dateLocale"), { timeZone: "Australia/Brisbane", dateStyle: "medium", timeStyle: "short" }) + t("tz");
 }
+
+let LAST_UPDATED_ISO = null;
 
 async function loadData(){
   try{
@@ -1245,7 +1568,8 @@ async function loadData(){
       ignoreLocation: true,
     });
 
-    updatedAtText.textContent = `データ最終更新: ${formatUpdatedAt(json.updatedAt)} / 期限判定は表示時点の日付で自動計算`;
+    LAST_UPDATED_ISO = json.updatedAt || null;
+    updatedAtText.textContent = t("updatedAt", formatUpdatedAt(LAST_UPDATED_ISO));
 
     populateMakeSelect();
     renderChips();
@@ -1253,9 +1577,9 @@ async function loadData(){
     handleHashChange();
   }catch(err){
     loadError.hidden = false;
-    loadErrorDetail.textContent = `data/sev-data.json の取得に失敗しました（${err.message}）。初回のGitHub Actions実行がまだ完了していないか、パスが正しくない可能性があります。`;
-    resultCount.textContent = "読み込みエラー";
-    updatedAtText.textContent = "データ最終更新: 取得失敗";
+    loadErrorDetail.textContent = t("loadErrorBody", err.message);
+    resultCount.textContent = t("loadFailShort");
+    updatedAtText.textContent = t("updatedFail");
   }
 }
 
@@ -1270,6 +1594,8 @@ async function loadMarketData(){
   }
 }
 
+applyI18n();
+resultCount.textContent = t("loading");
 loadMarketData().finally(loadData);
 </script>
 </body>
