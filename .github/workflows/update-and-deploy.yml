@@ -71,6 +71,9 @@ jobs:
           if [ -f data/market-data.json ]; then
             cp data/market-data.json public/data/market-data.json
           fi
+          if [ -d images ]; then
+            cp -r images public/images
+          fi
 
       - uses: actions/upload-pages-artifact@v3
         with:
