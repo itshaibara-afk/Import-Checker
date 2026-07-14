@@ -1,7 +1,7 @@
 {
-  "updatedAt": "2026-07-14T03:41:13.603250+00:00",
+  "updatedAt": "2026-07-14T23:18:09.525209+00:00",
   "source": "https://www.rover.infrastructure.gov.au/PublishedApprovals/SEVApprovals/",
-  "count": 594,
+  "count": 595,
   "vehicles": [
     {
       "sev": "SEV-000486",
@@ -3562,7 +3562,11 @@
       "buildStart": "2024-02",
       "year": "2024",
       "buildEnd": null,
-      "roverId": "82e9c3a4-523e-ef11-a316-000d3acb72e0"
+      "roverId": "82e9c3a4-523e-ef11-a316-000d3acb72e0",
+      "codeFull": "DT Return to list Website RAV Contact Us Privacy Statement",
+      "variant": "RAM 1500 SST",
+      "variantDetails": "RAM 1500 fitted with SST Hurricane 6 cylinder turbo engine ONLY",
+      "criterion": "Left-Hand Drive Criterion"
     },
     {
       "sev": "SEV-000618",
@@ -15845,6 +15849,16 @@
       "criterion": "Left-Hand Drive Criterion",
       "modelReports": [
         {
+          "mre": "MRE-000396",
+          "roverId": "d862a0aa-7f7f-ee11-8179-00224892b406",
+          "status": "In Force",
+          "holder": "Maracoonda Auto Pty Ltd",
+          "odometerLimitKm": null,
+          "odometerText": null,
+          "reportNotes": "Maracoonda Automotive provides vehicles in both the NB1 and NB2 categories for RAM and Ford Super Duty, as well as the Ford F150 Series in NA Category. Vehicle details",
+          "complianceNotes": null
+        },
+        {
           "mre": "MRE-000939",
           "roverId": "4efeccec-8b4a-f111-bec5-7ced8da0d515",
           "status": "In Force",
@@ -15867,6 +15881,10 @@
       "year": "2018",
       "buildEnd": null,
       "roverId": "c773be91-eec4-f011-bbd3-6045bdc43a54",
+      "codeFull": "3500 DD, 4500 & 5500 DP Notes This entry canvasses only cab chassis configurations of the Ram HD Series, with GVM ratings of 3500kg or greater, signified by DD and DP chassis codes. Return to list Website RAV Contact Us Privacy Statement",
+      "variant": "3500 DD, 4500 & 5500 DP",
+      "variantDetails": "This entry canvasses only cab chassis configurations of the Ram HD Series, with GVM ratings of 3500kg or greater, signified by DD and DP chassis codes.",
+      "criterion": "Left-Hand Drive Criterion",
       "modelReports": [
         {
           "mre": "MRE-000940",
@@ -16362,6 +16380,16 @@
       "variantDetails": "Only variants with Dual Rear Wheel Configuration",
       "criterion": "Left-Hand Drive Criterion",
       "modelReports": [
+        {
+          "mre": "MRE-000396",
+          "roverId": "d862a0aa-7f7f-ee11-8179-00224892b406",
+          "status": "In Force",
+          "holder": "Maracoonda Auto Pty Ltd",
+          "odometerLimitKm": null,
+          "odometerText": null,
+          "reportNotes": "Maracoonda Automotive provides vehicles in both the NB1 and NB2 categories for RAM and Ford Super Duty, as well as the Ford F150 Series in NA Category. Vehicle details",
+          "complianceNotes": null
+        },
         {
           "mre": "MRE-000939",
           "roverId": "4efeccec-8b4a-f111-bec5-7ced8da0d515",
@@ -17937,6 +17965,22 @@
       "codeFull": "MP Return to list Website RAV Contact Us Privacy Statement",
       "variant": "ALL",
       "criterion": "Rarity Criterion"
+    },
+    {
+      "sev": "SEV-001084",
+      "category": "MA - Passenger Vehicle",
+      "expiry": "2029-07-13",
+      "make": "LEXUS",
+      "model": "RC F",
+      "code": "USC10",
+      "buildStart": "2021-12",
+      "buildEnd": "2025-12",
+      "year": "2021–2025",
+      "roverId": "4b3e1ed2-6b7f-f111-ab0e-7c1e528a7792",
+      "codeFull": "USC10 Notes This Register listing is for Lexus USC10 series vehicles of specific build date range ONLY Return to list Website RAV Contact Us Privacy Statement",
+      "variant": "ALL",
+      "variantDetails": "Lexus USC10 series vehicles of specific build date range ONLY",
+      "criterion": "Performance Criterion"
     }
   ]
 }
