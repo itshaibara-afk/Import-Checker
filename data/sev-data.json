@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-07-13T22:18:27.118743+00:00",
+  "updatedAt": "2026-07-14T03:41:13.603250+00:00",
   "source": "https://www.rover.infrastructure.gov.au/PublishedApprovals/SEVApprovals/",
   "count": 594,
   "vehicles": [
@@ -3562,11 +3562,7 @@
       "buildStart": "2024-02",
       "year": "2024",
       "buildEnd": null,
-      "roverId": "82e9c3a4-523e-ef11-a316-000d3acb72e0",
-      "codeFull": "DT Return to list Website RAV Contact Us Privacy Statement",
-      "variant": "RAM 1500 SST",
-      "variantDetails": "RAM 1500 fitted with SST Hurricane 6 cylinder turbo engine ONLY",
-      "criterion": "Left-Hand Drive Criterion"
+      "roverId": "82e9c3a4-523e-ef11-a316-000d3acb72e0"
     },
     {
       "sev": "SEV-000618",
@@ -8481,7 +8477,7 @@
       ]
     },
     {
-      "sev": "SEV-000742\nUnder review",
+      "sev": "SEV-000742",
       "category": "MA - Passenger Vehicle",
       "expiry": "2027-12-16",
       "make": "Toyota",
@@ -8494,7 +8490,29 @@
       "codeFull": "GGA10, GRX121, GRX133 Return to list Website RAV Contact Us Privacy Statement",
       "variant": "GRX133",
       "variantDetails": "V6 2GR-FSE 3.5l",
-      "criterion": "Performance Criterion"
+      "criterion": "Performance Criterion",
+      "modelReports": [
+        {
+          "mre": "MRE-000079",
+          "roverId": "237cf1c1-5724-ed11-9db1-00224811d11f",
+          "status": "In Force",
+          "holder": "SYDNEY AVV PTY LTD",
+          "odometerLimitKm": null,
+          "odometerText": null,
+          "reportNotes": "Toyota Mark X model GRX133 with 2GR-FSE V6 engine Vehicle details",
+          "complianceNotes": "This Model Report approval is granted with the specified condition that only vehicles that have travelled fewer than 80,000 kilometres may be modified in accordance with the associated Work Instructions and presented to an Authorised Vehicle Verifier (AVV) for verification. A request to remove this condition may be made by the approval holder by providing to the department an IM240 test that demonstrates the performance of the emissions system of a vehicle that has travelled greater than 80,000 kilometres and is able to be modified in accordance with the Work Instructions in this Model Report approval."
+        },
+        {
+          "mre": "MRE-000095",
+          "roverId": "6c46f029-ff49-ed11-bba2-0022489333a7",
+          "status": "In Force",
+          "holder": "ADR MODEL REPORTS PTY LTD",
+          "odometerLimitKm": null,
+          "odometerText": null,
+          "reportNotes": "Vehicle details",
+          "complianceNotes": null
+        }
+      ]
     },
     {
       "sev": "SEV-000743",
@@ -15827,16 +15845,6 @@
       "criterion": "Left-Hand Drive Criterion",
       "modelReports": [
         {
-          "mre": "MRE-000396",
-          "roverId": "d862a0aa-7f7f-ee11-8179-00224892b406",
-          "status": "In Force",
-          "holder": "Maracoonda Auto Pty Ltd",
-          "odometerLimitKm": null,
-          "odometerText": null,
-          "reportNotes": "Maracoonda Automotive provides vehicles in both the NB1 and NB2 categories for RAM and Ford Super Duty, as well as the Ford F150 Series in NA Category. Vehicle details",
-          "complianceNotes": null
-        },
-        {
           "mre": "MRE-000939",
           "roverId": "4efeccec-8b4a-f111-bec5-7ced8da0d515",
           "status": "In Force",
@@ -15859,10 +15867,6 @@
       "year": "2018",
       "buildEnd": null,
       "roverId": "c773be91-eec4-f011-bbd3-6045bdc43a54",
-      "codeFull": "3500 DD, 4500 & 5500 DP Notes This entry canvasses only cab chassis configurations of the Ram HD Series, with GVM ratings of 3500kg or greater, signified by DD and DP chassis codes. Return to list Website RAV Contact Us Privacy Statement",
-      "variant": "3500 DD, 4500 & 5500 DP",
-      "variantDetails": "This entry canvasses only cab chassis configurations of the Ram HD Series, with GVM ratings of 3500kg or greater, signified by DD and DP chassis codes.",
-      "criterion": "Left-Hand Drive Criterion",
       "modelReports": [
         {
           "mre": "MRE-000940",
@@ -16021,7 +16025,7 @@
       "mileageLimit": "80,000km未満（モデルレポート条件）"
     },
     {
-      "sev": "SEV-000994\nUnder review",
+      "sev": "SEV-000994",
       "category": "MA - Passenger Vehicle",
       "expiry": "2028-11-19",
       "make": "Mercedes-Benz",
@@ -16031,7 +16035,7 @@
       "year": "2023",
       "buildEnd": null,
       "roverId": "1d75e383-bbc5-f011-bbd3-6045bde72a1c",
-      "codeFull": "214054 Notes This Register entry is for Mercedes-Benz W214 series E300e PHEV variant of model code 214054 ONLY. Return to list Website RAV Contact Us Privacy Statement",
+      "codeFull": "214054 Notes This Register entry is for Mercedes-Benz W214 series E300e (and E350e from Japanese Domestic Market) PHEV variant of model code 214054 ONLY. Return to list Website RAV Contact Us Privacy Statement",
       "variant": "E300e",
       "variantDetails": "ONLY vehicles fitted with M254 PHEV Engine",
       "criterion": "Environmental Criterion"
@@ -16358,16 +16362,6 @@
       "variantDetails": "Only variants with Dual Rear Wheel Configuration",
       "criterion": "Left-Hand Drive Criterion",
       "modelReports": [
-        {
-          "mre": "MRE-000396",
-          "roverId": "d862a0aa-7f7f-ee11-8179-00224892b406",
-          "status": "In Force",
-          "holder": "Maracoonda Auto Pty Ltd",
-          "odometerLimitKm": null,
-          "odometerText": null,
-          "reportNotes": "Maracoonda Automotive provides vehicles in both the NB1 and NB2 categories for RAM and Ford Super Duty, as well as the Ford F150 Series in NA Category. Vehicle details",
-          "complianceNotes": null
-        },
         {
           "mre": "MRE-000939",
           "roverId": "4efeccec-8b4a-f111-bec5-7ced8da0d515",
