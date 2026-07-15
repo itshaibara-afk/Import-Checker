@@ -587,7 +587,9 @@ const I18N = {
     footer: `非公式ミラーサイト / データソース: <a href="${ROVER_LIST_URL}" target="_blank" rel="noopener">ROVER公式サイト</a>（毎日自動取得）/ 公式登録簿ではありません`,
     themeDark: "ダークモード", themeLight: "ライトモード",
     photoOwn: "登録写真",
-    photoWiki: (title) => `代表画像: ${title}（Wikipediaより・実車の写真ではありません）`,
+    photoMapped: "写真（車種マッピング）",
+    photoWiki: (title) => `参考画像: ${title}（Wikipedia）`,
+    cfjLink: "CAR FROM JAPANで写真を見る ↗",
     langBtn: "EN",
   },
   en: {
@@ -657,7 +659,9 @@ const I18N = {
     footer: `Unofficial mirror / Data source: <a href="${ROVER_LIST_URL}" target="_blank" rel="noopener">official ROVER site</a> (updated daily) / Not the official register`,
     themeDark: "Dark mode", themeLight: "Light mode",
     photoOwn: "Photo",
-    photoWiki: (title) => `Representative image: ${title} (via Wikipedia — not the actual vehicle)`,
+    photoMapped: "Photo (model mapping)",
+    photoWiki: (title) => `Reference image: ${title} (Wikipedia)`,
+    cfjLink: "View photos on CAR FROM JAPAN ↗",
     langBtn: "日本語",
   },
 };
@@ -1152,8 +1156,14 @@ const modalContent = document.getElementById("modalContent");
 const modalClose = document.getElementById("modalClose");
 
 // ------- 車両写真 -------
-// 1) リポジトリの images/<SEV番号>.jpg（自分の写真）を最優先で表示
-// 2) 無ければWikipediaの代表画像を検索して表示（出典リンク・注意書き付き）
+// 写真の優先順位:
+//  1) 自分の写真: images/<SEV番号>.jpg|png|webp
+//  2) 車種マッピング: data/photos.json の "<make>|<model>"（大文字化キー）→ 画像URL
+//     （CAR FROM JAPAN等、利用権のある画像URLをここに入れておく。1車種1回でOK）
+//  3) Wikipedia参考画像（実車ではない。車らしいページのみ採用し、バギー/ATV等は除外）
+// これとは別に、常に「CAR FROM JAPANで写真を見る」リンクを表示する。
+let PHOTOS = null; // data/photos.json（無ければ null）
+
 function tryLoadImage(url){
   return new Promise(resolve => {
     const img = new Image();
@@ -1163,10 +1173,34 @@ function tryLoadImage(url){
   });
 }
 
-function photoSearchQuery(group){
-  let model = (group.model || "").split("/")[0];
-  model = model.replace(/welcab|chaircab|welfare|variant|only/ig, " ").replace(/\s+/g, " ").trim();
-  return `${(group.make || "").trim()} ${model}`.trim();
+function cleanModelForPhoto(model){
+  return (model || "").split("/")[0]
+    .replace(/welcab|chaircab|welfare|variant|variants|only/ig, " ")
+    .replace(/\s+/g, " ").trim();
+}
+
+function photoMapKey(group){
+  return ((group.make || "").trim().toUpperCase()) + "|" +
+         (cleanModelForPhoto(group.model).toUpperCase());
+}
+
+// CAR FROM JAPAN のスペックページURL（make/model がそのままURLになる規則）
+function cfjUrl(group){
+  const make = (group.make || "").trim().toLowerCase().replace(/\s+/g, "-");
+  const model = cleanModelForPhoto(group.model).toLowerCase().replace(/\s+/g, "-");
+  if(!make || !model) return "https://carfromjapan.com/specifications";
+  return `https://carfromjapan.com/specifications/${encodeURIComponent(make)}/${encodeURIComponent(model)}`;
+}
+
+// Wikipediaの候補が「乗用車の記事」らしいか判定（バギー・ATV・バイク等を除外）
+function looksLikeCar(extract, isMotorcycleCat){
+  const text = (extract || "").toLowerCase();
+  const bad = /\b(all-terrain|off-road buggy|dune buggy|\batv\b|go-kart|quad bike|snowmobile|three-wheel)\b/;
+  if(bad.test(text)) return false;
+  const moto = /\b(motorcycle|motorbike|scooter|moped)\b/;
+  if(moto.test(text)) return isMotorcycleCat === true;
+  const car = /\b(car|automobile|sedan|saloon|hatchback|coupe|coupé|station wagon|estate|minivan|mpv|suv|kei car|pickup|van|vehicle manufactured|produced by)\b/;
+  return car.test(text);
 }
 
 let photoRequestSeq = 0;
@@ -1177,48 +1211,57 @@ async function loadVehiclePhoto(group){
   container.hidden = true;
   container.innerHTML = "";
 
-  // 1) 自分の写真（images/SEV-xxxxxx.jpg / .png / .webp）
+  const showImage = (src, captionText, captionHref) => {
+    if(seq !== photoRequestSeq) return;
+    const cap = captionHref
+      ? `<a href="${captionHref}" target="_blank" rel="noopener">${captionText}</a>`
+      : captionText;
+    container.innerHTML = `<img src="${src}" alt="">` + `<div class="photo-caption">${cap}</div>`;
+    container.hidden = false;
+  };
+
+  // 1) 自分の写真
   for(const sev of (group.sevs || []).slice(0, 2)){
     for(const ext of ["jpg", "png", "webp"]){
       const url = `images/${encodeURIComponent(sev)}.${ext}`;
       if(await tryLoadImage(url)){
-        if(seq !== photoRequestSeq) return; // 別の車を開き直していたら中断
-        container.innerHTML = `<img src="${url}" alt="">` +
-          `<div class="photo-caption">${t("photoOwn")}</div>`;
-        container.hidden = false;
+        showImage(url, t("photoOwn"));
         return;
       }
     }
   }
 
-  // 2) Wikipediaの代表画像
+  // 2) 車種マッピング（data/photos.json）
+  if(PHOTOS){
+    const entry = PHOTOS[photoMapKey(group)] || PHOTOS[(group.make || "").toUpperCase() + "|" + (group.model || "").toUpperCase()];
+    if(entry){
+      const url = typeof entry === "string" ? entry : entry.url;
+      const credit = (typeof entry === "object" && entry.credit) ? entry.credit : t("photoMapped");
+      const href = (typeof entry === "object" && entry.href) ? entry.href : null;
+      if(url && await tryLoadImage(url)){
+        showImage(url, credit, href);
+        return;
+      }
+    }
+  }
+
+  // 3) Wikipedia参考画像（車らしい記事のみ）
   try{
-    const q = photoSearchQuery(group);
+    const q = `${(group.make || "").trim()} ${cleanModelForPhoto(group.model)}`.trim();
     if(!q) return;
+    const isMoto = group.categories.some(c => /motor\s*cycle/i.test(c));
     const api = "https://en.wikipedia.org/w/api.php?action=query&format=json&origin=*" +
-      "&generator=search&gsrlimit=1&gsrsearch=" + encodeURIComponent(q) +
-      "&prop=pageimages%7Cinfo&inprop=url&piprop=thumbnail&pithumbsize=640";
+      "&generator=search&gsrlimit=4&gsrsearch=" + encodeURIComponent(q) +
+      "&prop=pageimages%7Cinfo%7Cextracts&inprop=url&exintro=1&explaintext=1&exchars=300&piprop=thumbnail&pithumbsize=640";
     const res = await fetch(api);
     if(!res.ok) return;
     const json = await res.json();
     const pages = json.query && json.query.pages ? Object.values(json.query.pages) : [];
-    const page = pages[0];
-    if(!page || !page.thumbnail || !page.thumbnail.source) return;
-    if(seq !== photoRequestSeq) return;
-    const img = document.createElement("img");
-    img.alt = "";
-    img.src = page.thumbnail.source;
-    const caption = document.createElement("div");
-    caption.className = "photo-caption";
-    const link = document.createElement("a");
-    link.href = page.fullurl || ("https://en.wikipedia.org/?curid=" + page.pageid);
-    link.target = "_blank";
-    link.rel = "noopener";
-    link.textContent = t("photoWiki", page.title);
-    caption.appendChild(link);
-    container.appendChild(img);
-    container.appendChild(caption);
-    container.hidden = false;
+    pages.sort((a, b) => (a.index || 99) - (b.index || 99));
+    const page = pages.find(p => p.thumbnail && p.thumbnail.source && looksLikeCar(p.extract, isMoto));
+    if(!page) return;
+    showImage(page.thumbnail.source, t("photoWiki", page.title),
+      page.fullurl || ("https://en.wikipedia.org/?curid=" + page.pageid));
   }catch(e){
     // 写真が出ないだけなので静かに無視
   }
@@ -1594,9 +1637,21 @@ async function loadMarketData(){
   }
 }
 
+async function loadPhotos(){
+  try{
+    const res = await fetch("data/photos.json", { cache: "no-store" });
+    if(!res.ok) return; // 無ければマッピング無しで動作
+    const json = await res.json();
+    // { "TOYOTA|COROLLA": "https://...jpg", ... } または { byModel: {...} }
+    PHOTOS = json.byModel || json;
+  }catch(err){
+    PHOTOS = null;
+  }
+}
+
 applyI18n();
 resultCount.textContent = t("loading");
-loadMarketData().finally(loadData);
+Promise.all([loadMarketData(), loadPhotos()]).finally(loadData);
 </script>
 </body>
 </html>
