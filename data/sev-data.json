@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-07-14T23:18:09.525209+00:00",
+  "updatedAt": "2026-07-15T08:58:47.360967+00:00",
   "source": "https://www.rover.infrastructure.gov.au/PublishedApprovals/SEVApprovals/",
   "count": 595,
   "vehicles": [
@@ -11667,6 +11667,16 @@
           "roverId": "ab7f82bf-514e-f111-bec5-0022489474bc",
           "status": "In Force",
           "holder": "AMERICAN COMPLIANCE PTY LTD",
+          "odometerLimitKm": null,
+          "odometerText": null,
+          "reportNotes": "Vehicle details",
+          "complianceNotes": null
+        },
+        {
+          "mre": "MRE-000967",
+          "roverId": "99b84e94-1980-f111-ab0f-00224892f8b8",
+          "status": "In Force",
+          "holder": "CAD Developments Pty Ltd",
           "odometerLimitKm": null,
           "odometerText": null,
           "reportNotes": "Vehicle details",
