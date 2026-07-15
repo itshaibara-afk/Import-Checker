@@ -1,7 +1,7 @@
 {
-  "updatedAt": "2026-07-15T08:58:47.360967+00:00",
+  "updatedAt": "2026-07-15T23:12:00.932395+00:00",
   "source": "https://www.rover.infrastructure.gov.au/PublishedApprovals/SEVApprovals/",
-  "count": 595,
+  "count": 596,
   "vehicles": [
     {
       "sev": "SEV-000486",
@@ -17960,6 +17960,22 @@
       "codeFull": "E51, NE51, ME51, MNE51 Return to list Website RAV Contact Us Privacy Statement",
       "variant": "ALL",
       "criterion": "Campervans and Motorhomes Criterion"
+    },
+    {
+      "sev": "SEV-001081",
+      "category": "MA - Passenger Vehicle",
+      "expiry": "2029-07-15",
+      "make": "Toyota",
+      "model": "Vitz Welcab ONLY",
+      "code": "130 Series Welcab",
+      "buildStart": "2010-12",
+      "buildEnd": "2020-03",
+      "year": "2010–2020",
+      "roverId": "092218a7-557a-f111-ab0f-00224892f8b8",
+      "codeFull": "130 Series Welcab Notes This Register listing is for Toyota Vitz vehicles of model code NSP-130, KSP-130, NHP-130 and NSP-135 fitted with Welcab mobility features ONLY. Note that model code NHP-130-AHXVB is NOT eligible. Return to list Website RAV Contact Us Privacy Statement",
+      "variant": "ALL",
+      "variantDetails": "Toyota Vitz of model code NSP-130, KSP-130, NHP-130 and NSP-135 fitted with Welcab mobility features ONLY. NHP-130-AHXVB is NOT eligible",
+      "criterion": "Mobility Criterion"
     },
     {
       "sev": "SEV-001082",
