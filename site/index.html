@@ -904,20 +904,34 @@ function findById(id){
   );
 }
 
+function startYearsOf(group){
+  // "2018–2020" や "2023–" から開始年の数値を取り出す
+  return (group.years || []).map(y => {
+    const m = String(y).match(/(\d{4})/);
+    return m ? parseInt(m[1], 10) : null;
+  }).filter(Boolean);
+}
+
 function findSimilar(group){
+  const myMake = (group.make || "").toUpperCase();
+  const myYears = startYearsOf(group);
   const others = GROUPS.filter(g => idKeyOf(g) !== idKeyOf(group));
   const scored = others.map(g => {
+    const sameMake = (g.make || "").toUpperCase() === myMake;
+    const sharedCat = g.categories.some(c => group.categories.includes(c));
     let score = 0;
-    if(g.categories.some(c => group.categories.includes(c))) score += 2;
-    if((g.make || "").toUpperCase() === (group.make || "").toUpperCase()) score += 1;
-    return {item: g, score};
-  }).filter(s => s.score > 0)
-    .sort((a, b) => b.score - a.score);
-  let picked = scored.slice(0, 4).map(s => s.item);
-  if(picked.length === 0){
-    picked = others.slice(0, 3);
-  }
-  return picked;
+    if(sameMake) score += 3;      // 同じメーカーを最重視（Land Rover→他のLand Rover）
+    if(sharedCat) score += 2;     // カテゴリ（車両区分）が一致
+    const gy = startYearsOf(g);
+    if(myYears.length && gy.length && gy.some(a => myYears.some(b => Math.abs(a - b) <= 5))) score += 1;
+    if(!!g.isWelcab === !!group.isWelcab) score += 1;
+    // 「関連あり」= 同じメーカー、または同じカテゴリのどちらかを満たすもののみ。
+    // 年代や福祉区分だけの一致では関連車両とみなさない（無関係な車を排除）。
+    return {item: g, score, related: sameMake || sharedCat};
+  })
+  .filter(s => s.related)
+  .sort((a, b) => b.score - a.score);
+  return scored.slice(0, 4).map(s => s.item);
 }
 
 function similarItemHtml(group){
@@ -1142,12 +1156,12 @@ function renderDetailHtml(group){
 
     ${marketSectionHtml(group)}
 
-    <div class="similar-section">
+    ${similar.length ? `<div class="similar-section">
       <h3>${t("similar")}</h3>
       <div class="similar-grid">
         ${similar.map(similarItemHtml).join("")}
       </div>
-    </div>
+    </div>` : ""}
   `;
 }
 
@@ -1163,6 +1177,9 @@ const modalClose = document.getElementById("modalClose");
 //  3) Wikipedia参考画像（実車ではない。車らしいページのみ採用し、バギー/ATV等は除外）
 // これとは別に、常に「CAR FROM JAPANで写真を見る」リンクを表示する。
 let PHOTOS = null; // data/photos.json（無ければ null）
+// Wikipedia参考画像を最終手段として使うか。carfromjapan写真運用にしたのでfalse。
+// （trueにすると自分の写真もマッピングも無い車でWikipedia画像を出す）
+const PHOTO_WIKI_FALLBACK = false;
 
 function tryLoadImage(url){
   return new Promise(resolve => {
@@ -1245,7 +1262,8 @@ async function loadVehiclePhoto(group){
     }
   }
 
-  // 3) Wikipedia参考画像（車らしい記事のみ）
+  // 3) Wikipedia参考画像（PHOTO_WIKI_FALLBACK=true のときだけ・車らしい記事のみ）
+  if(!PHOTO_WIKI_FALLBACK) return;
   try{
     const q = `${(group.make || "").trim()} ${cleanModelForPhoto(group.model)}`.trim();
     if(!q) return;
