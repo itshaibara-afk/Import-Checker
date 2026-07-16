@@ -1,0 +1,168 @@
+#!/usr/bin/env python3
+"""
+fetch_carfromjapan_photos.py — SEVデータの各メーカー/モデルについて、
+CAR FROM JAPAN のスペックページから代表写真URL（og:image）を取得し、
+data/photos.json を生成する。（サーバー側で実行 = ブラウザのCORS制限を回避）
+
+*** 実行前に必ずお読みください ***
+このスクリプトは carfromjapan.com のページを自動取得します。利用者は
+「carfromjapanの画像を自分のサイトで使う取り決め（許可）」があることを前提に
+しています。自動取得・画像利用がその取り決めの範囲に含まれることを、必ずご自身で
+carfromjapan側に確認してください。取り決めが無い/範囲外の場合はこのスクリプトを
+実行しないでください（サイトは photos.json が無くても動作します）。
+
+仕組み
+------
+- スペックページのURLは /specifications/<make>/<model> の規則（小文字・スペースは-）。
+- ページのHTMLに含まれる <meta property="og:image" content="..."> を正規表現で抽出。
+  （og:image はSNS共有用にサーバー側HTMLへ埋め込まれるため、JS描画でも取得できる）
+- 取得できたものだけを data/photos.json の byModel に書き込む。既存の手動設定
+  （空でない url）は上書きしない。
+
+使い方
+------
+    # 追加インストール不要（Python標準ライブラリのみ使用）
+    python fetch_carfromjapan_photos.py --data ../data/sev-data.json --out ../data/photos.json
+    # 動作確認は少数から: --limit 5
+"""
+
+import argparse
+import json
+import re
+import sys
+import time
+from urllib.parse import quote
+
+import urllib.request
+import urllib.error
+
+BASE = "https://carfromjapan.com/specifications"
+UA = "Mozilla/5.0 (compatible; sev-register-photo-fetcher/1.0)"
+
+RE_OG_IMAGE = re.compile(
+    r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']', re.I)
+RE_OG_IMAGE_ALT = re.compile(
+    r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']', re.I)
+RE_TWITTER_IMAGE = re.compile(
+    r'<meta[^>]+name=["\']twitter:image["\'][^>]+content=["\']([^"\']+)["\']', re.I)
+
+# 除外したいプレースホルダ/ロゴらしいURL断片（実写真でない可能性が高いもの）
+BAD_URL_HINTS = ("logo", "placeholder", "default", "no-image", "noimage", "favicon", "sprite")
+
+
+def clean_model(model):
+    m = (model or "").split("/")[0]
+    m = re.sub(r"(?i)\b(welcab|chaircab|welfare|variant|variants|only)\b", " ", m)
+    return re.sub(r"\s+", " ", m).strip()
+
+
+def slug(s):
+    return re.sub(r"\s+", "-", (s or "").strip().lower())
+
+
+def spec_url(make, model):
+    mk, md = slug(make), slug(clean_model(model))
+    if not mk or not md:
+        return None
+    return f"{BASE}/{quote(mk)}/{quote(md)}"
+
+
+def fetch_html(url, timeout=20):
+    req = urllib.request.Request(url, headers={"User-Agent": UA})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            if resp.status != 200:
+                return None
+            charset = resp.headers.get_content_charset() or "utf-8"
+            return resp.read().decode(charset, errors="replace")
+    except urllib.error.HTTPError as e:
+        print(f"[cfj-photos] HTTP {e.code}: {url}", file=sys.stderr)
+        return None
+    except Exception as e:
+        print(f"[cfj-photos] error: {url} ({e})", file=sys.stderr)
+        return None
+
+
+def extract_image(html):
+    for rx in (RE_OG_IMAGE, RE_OG_IMAGE_ALT, RE_TWITTER_IMAGE):
+        m = rx.search(html or "")
+        if m:
+            url = m.group(1).strip()
+            low = url.lower()
+            if url.startswith("http") and not any(h in low for h in BAD_URL_HINTS):
+                return url
+    return None
+
+
+def load_existing(out_path):
+    try:
+        with open(out_path, encoding="utf-8") as f:
+            data = json.load(f)
+        return data.get("byModel", {}) if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Fetch CAR FROM JAPAN photos into data/photos.json")
+    ap.add_argument("--data", default="../data/sev-data.json")
+    ap.add_argument("--out", default="../data/photos.json")
+    ap.add_argument("--delay", type=float, default=1.0, help="1リクエストごとの待機秒（相手サイトへの配慮）")
+    ap.add_argument("--limit", type=int, default=0, help="取得する車種数の上限（0=無制限。動作確認用）")
+    args = ap.parse_args()
+
+    with open(args.data, encoding="utf-8") as f:
+        doc = json.load(f)
+    vehicles = doc.get("vehicles", doc if isinstance(doc, list) else [])
+
+    # 一意なメーカー/モデルを収集
+    seen = {}
+    for v in vehicles:
+        make, model = (v.get("make") or "").strip(), (v.get("model") or "").strip()
+        if not make or not model:
+            continue
+        key = f"{make.upper()}|{clean_model(model).upper()}"
+        if key not in seen:
+            seen[key] = (make, model)
+
+    existing = load_existing(args.out)
+    by_model = dict(existing)  # 既存を保持
+
+    processed = 0
+    added = 0
+    for key, (make, model) in seen.items():
+        # 既に手動設定などで有効なURLがあればスキップ（上書きしない）
+        cur = existing.get(key)
+        if isinstance(cur, dict) and cur.get("url"):
+            continue
+        if isinstance(cur, str) and cur:
+            continue
+
+        url = spec_url(make, model)
+        if not url:
+            continue
+        html = fetch_html(url)
+        img = extract_image(html) if html else None
+        if img:
+            by_model[key] = {"url": img, "credit": "CAR FROM JAPAN", "href": url}
+            added += 1
+            print(f"[cfj-photos] OK {key} -> {img}", file=sys.stderr)
+        else:
+            print(f"[cfj-photos] no image for {key} ({url})", file=sys.stderr)
+
+        processed += 1
+        if args.limit and processed >= args.limit:
+            break
+        time.sleep(args.delay)
+
+    out = {
+        "note": "CAR FROM JAPAN のスペックページ og:image を自動取得したもの。取り決めの範囲で利用してください。",
+        "byModel": by_model,
+    }
+    with open(args.out, "w", encoding="utf-8") as f:
+        json.dump(out, f, ensure_ascii=False, indent=2)
+    print(f"[cfj-photos] done: {added} new images, {len(by_model)} total in {args.out}", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()
