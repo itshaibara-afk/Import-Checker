@@ -40,15 +40,25 @@ jobs:
           python scrape_rover.py --out ../data/sev-data.json
         continue-on-error: false
 
+      # CAR FROM JAPAN の写真URLを取得して data/photos.json を更新する。
+      # ※ carfromjapan側と自動取得・画像利用の取り決めがある前提。取り決めが無い/不明な
+      #    場合は、この step を丸ごと削除するかコメントアウトしてください（サイトは
+      #    photos.json が無くても動作します）。
+      - name: Fetch CAR FROM JAPAN photos
+        run: |
+          cd scraper
+          python fetch_carfromjapan_photos.py --data ../data/sev-data.json --out ../data/photos.json --delay 1.0
+        continue-on-error: true
+
       - name: Commit updated data (if changed)
         run: |
           git config user.name "sev-register-bot"
           git config user.email "actions@users.noreply.github.com"
-          if git diff --quiet -- data/sev-data.json; then
+          git add data/sev-data.json data/photos.json 2>/dev/null || true
+          if git diff --cached --quiet; then
             echo "No data changes."
           else
-            git add data/sev-data.json
-            git commit -m "chore: daily SEV data update ($(date -u +%Y-%m-%d))"
+            git commit -m "chore: daily SEV data + photos update ($(date -u +%Y-%m-%d))"
             git push
           fi
 
